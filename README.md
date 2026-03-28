@@ -1,4 +1,4 @@
-﻿# Resume Builder
+# Resume Builder
 
 一个基于 Vue 3 + Vite 的简历编辑与 AI 面试一体化工具。
 
@@ -13,7 +13,7 @@
 - 模块开关与顺序调整：支持可见性切换与拖动式上下调整（基础信息固定在首位）。
 - 实时完整度统计：根据已启用模块动态计算简历完整度。
 - 自动本地保存：编辑内容自动持久化到 `localStorage`，支持手动“保存草稿”。
-- 模板切换：内置 6 套简历模板。
+- 模板切换：内置 8 套简历模板。
 - 导出能力：
   - 高清 PDF
   - 压缩 PDF
@@ -41,10 +41,77 @@
 
 - 默认模板
 - 蓝色线性模板
+- 绿色图标线性模板
 - 黑白线性模板
 - 通用职场模板
 - 蓝色侧栏职场模板
 - 蓝色分栏专业模板
+- 蓝色卡片模板
+
+## 内置 Skills 用法（Codex）
+
+项目内置了 3 个技能文件，位于 `.codex/skills`：
+
+- `resume-template-from-image`
+- `resume-backend-project-optimizer`
+- `resume-interview-coach`
+
+### 1) resume-template-from-image（重点）
+
+**适用场景**
+- 你给一张/多张简历模板图片，希望 AI 在当前仓库里直接创建可用新模板。
+
+**最小输入**
+- 模板图片（必需）
+- 模板名称（必需）
+- 可选：`key`（不填会自动生成 kebab-case）
+
+**一键使用方式（推荐）**
+1. 在和 Codex 的对话里上传模板图片。
+2. 直接发指令：请使用 `resume-template-from-image` 按图片在项目内创建模板。
+3. 附上模板名称（可选再补 key/风格细节）。
+
+**示例提示词**
+```text
+/resume-template-from-image + 模板图片 + 模板名称
+```
+
+**执行后会在项目内自动完成**
+- 生成模板组件：`src/templates/resume/<key>/ResumeTemplate.vue`
+- 生成模板定义：`src/templates/resume/<key>/template.ts`
+- 生成模板预览图：`src/assets/templates/resume/<key>-preview.svg`
+- 自动注册到 `src/templates/resume/index.ts`（可在模板选择器直接切换）
+
+**关键规则（已内置在 skill 中）**
+- 只复用现有 `store` 字段，不新增数据模型字段。
+- 模块顺序跟随编辑区（`basicInfo` 固定第一，其余按 `moduleOrderStyle`）。
+- `skills/selfIntro/work/project/award/education` 富文本字段按 `v-html` 渲染。
+- 预览图必须是真实骨架 SVG，不允许空白图或占位图。
+
+### 2) resume-backend-project-optimizer
+
+**适用场景**
+- 你有中文后端项目描述，想改成“可面试追问 + 强数据化”的简历要点。
+
+**使用方式**
+- 在对话中贴出项目经历原文（职责、技术、结果越具体越好）。
+- 明确要求使用 `resume-backend-project-optimizer` 输出。
+
+**输出特点**
+- 按“负责功能 + 技术细节组合 + 解决问题 + 量化结果”重写。
+- 技术关键词和指标自动加粗，支持“待补字段”占位，避免虚构数据。
+
+### 3) resume-interview-coach
+
+**适用场景**
+- 你要做技术面试准备，想把项目经历打磨成可攻可守的话术。
+
+**使用方式**
+- 贴项目经历或简历段落，并要求使用 `resume-interview-coach`。
+
+**输出特点**
+- 4 步输出：业务诊断、连环追问、STAR 满分回答、简历防御建议。
+- 强调真实生产视角（监控、链路、故障、兜底），便于面试深挖。
 
 ## 技术栈
 
