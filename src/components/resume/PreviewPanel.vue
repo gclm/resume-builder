@@ -13,6 +13,8 @@ import { generateResumeMarkdown, downloadMarkdown } from '@/services/exportMarkd
 const store = useResumeStore()
 const resumeRef = ref<HTMLElement | null>(null)
 const exporting = ref(false)
+const exportProgress = ref(0)
+const exportProgressText = ref('')
 type ExportQualityMode = 'compressed' | 'hd'
 const exportMenuOpen = ref(false)
 const exportMenuRef = ref<HTMLElement | null>(null)
@@ -29,6 +31,17 @@ const currentTemplate = computed<ResumeTemplateDefinition>(
 )
 const currentTemplateComponent = computed(() => currentTemplate.value.component)
 const a4TemplateLabel = computed(() => `A4 / ${currentTemplate.value.name}`)
+
+function waitNextFrame(): Promise<void> {
+  return new Promise((resolve) => requestAnimationFrame(() => resolve()))
+}
+
+async function setExportProgress(percent: number, text: string) {
+  exportProgress.value = Math.max(0, Math.min(100, Math.round(percent)))
+  exportProgressText.value = text
+  await nextTick()
+  await waitNextFrame()
+}
 
 function findEffectiveCanvasHeight(canvas: HTMLCanvasElement): number {
   const ctx = canvas.getContext('2d', { willReadFrequently: true })
@@ -154,6 +167,8 @@ async function exportPDF(mode: ExportQualityMode) {
   if (!resumeRef.value) return
   exporting.value = true
   exportMenuOpen.value = false
+  exportProgress.value = 0
+  exportProgressText.value = '准备导出...'
   const isHdMode = mode === 'hd'
   const sourceNode = resumeRef.value
   const exportHost = document.createElement('div')
@@ -177,8 +192,11 @@ async function exportPDF(mode: ExportQualityMode) {
   document.body.appendChild(exportHost)
 
   try {
+    await setExportProgress(8, '准备导出资源...')
     await document.fonts?.ready
+    await setExportProgress(18, '加载导出引擎...')
     const [{ default: html2canvas }, { jsPDF }] = await Promise.all([import('html2canvas'), import('jspdf')])
+    await setExportProgress(36, '正在渲染简历画布...')
     const exportScale = isHdMode ? Math.min(4, Math.max(3, window.devicePixelRatio || 1)) : 2
     const canvas = await html2canvas(exportNode, {
       scale: exportScale,
@@ -189,6 +207,7 @@ async function exportPDF(mode: ExportQualityMode) {
       scrollX: 0,
       scrollY: 0,
     })
+    await setExportProgress(68, '正在分页生成 PDF...')
 
     const pdf = new jsPDF({
       unit: 'mm',
@@ -199,6 +218,7 @@ async function exportPDF(mode: ExportQualityMode) {
 
     const pagePixelHeight = Math.round(canvas.width * A4_RATIO)
     const effectiveHeight = findEffectiveCanvasHeight(canvas)
+    const totalPages = Math.max(1, Math.ceil(effectiveHeight / pagePixelHeight))
     let offsetY = 0
     let pageIndex = 0
 
@@ -224,16 +244,22 @@ async function exportPDF(mode: ExportQualityMode) {
 
       if (pageIndex > 0) pdf.addPage('a4', 'portrait')
       pdf.addImage(imgData, isHdMode ? 'PNG' : 'JPEG', 0, 0, imgWidthMm, imgHeightMm, undefined, isHdMode ? 'NONE' : 'FAST')
+      const pageProgress = 68 + Math.round((Math.min(pageIndex + 1, totalPages) / totalPages) * 28)
+      await setExportProgress(pageProgress, `正在写入第 ${Math.min(pageIndex + 1, totalPages)}/${totalPages} 页...`)
 
       offsetY += sliceHeight
       pageIndex += 1
     }
 
+    await setExportProgress(98, '正在保存文件...')
     pdf.save(`${store.basicInfo.name || '简历'}_resume.pdf`)
+    await setExportProgress(100, '导出完成')
   } catch (err) {
     console.error('PDF export failed:', err)
   } finally {
     exportHost.remove()
+    exportProgress.value = 0
+    exportProgressText.value = ''
     exporting.value = false
   }
 }
@@ -264,6 +290,15 @@ async function exportPDF(mode: ExportQualityMode) {
           <button class="export-menu-item" @click="exportPDF('compressed')">导出压缩 PDF</button>
           <button class="export-menu-item" @click="handleExportMarkdown">导出 Markdown</button>
         </div>
+      </div>
+    </div>
+    <div v-if="exporting" class="export-progress">
+      <div class="export-progress-head">
+        <span class="export-progress-text">{{ exportProgressText || '导出中...' }}</span>
+        <span class="export-progress-percent">{{ exportProgress }}%</span>
+      </div>
+      <div class="export-progress-track">
+        <span class="export-progress-fill" :style="{ width: `${exportProgress}%` }"></span>
       </div>
     </div>
 
@@ -449,6 +484,52 @@ async function exportPDF(mode: ExportQualityMode) {
 .export-menu-item:hover {
   background: #eadccf;
   color: #1f1916;
+}
+
+.export-progress {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 8px 10px;
+  border: 1px solid #e9ded0;
+  border-radius: 8px;
+  background: #fff8f2;
+}
+
+.export-progress-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.export-progress-text {
+  font-size: 12px;
+  color: #7b6a5b;
+  font-weight: 600;
+}
+
+.export-progress-percent {
+  font-size: 12px;
+  color: #2d2521;
+  font-weight: 700;
+}
+
+.export-progress-track {
+  position: relative;
+  width: 100%;
+  height: 6px;
+  border-radius: 999px;
+  background: #eedfce;
+  overflow: hidden;
+}
+
+.export-progress-fill {
+  display: block;
+  height: 100%;
+  border-radius: 999px;
+  background: linear-gradient(90deg, #d97745 0%, #c96a3b 100%);
+  transition: width 0.18s ease;
 }
 
 .preview-scroll {

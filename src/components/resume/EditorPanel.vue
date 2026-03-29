@@ -21,6 +21,9 @@ const showAiPanel = ref(false)
 const showAiConfig = ref(false)
 const moduleMenuOpen = ref(false)
 const moduleMenuRef = ref<HTMLElement | null>(null)
+const draggingModuleKey = ref<string | null>(null)
+const dragOverModuleKey = ref<string | null>(null)
+const nowTick = ref(Date.now())
 
 function handleAiClick() {
   if (!aiConfig.isConfigured) {
@@ -152,6 +155,31 @@ function handleSave() {
   }, 1800)
 }
 
+const isAutoSavePending = computed(() => store.nextAutoSaveAt !== null)
+const autoSaveChipText = computed(() => {
+  if (store.isSaving) {
+    return '自动保存中...'
+  }
+
+  const nextAt = store.nextAutoSaveAt
+  if (nextAt) {
+    const remainMs = Math.max(nextAt - nowTick.value, 0)
+    const remainSec = Math.max(remainMs / 1000, 0.1)
+    return `${remainSec.toFixed(1)}秒后自动保存`
+  }
+
+  const savedAt = store.lastSavedAt
+  if (!savedAt) {
+    return `自动保存间隔 ${Math.max(store.autoSaveDelayMs / 1000, 0.1).toFixed(1)}秒`
+  }
+
+  const elapsedMs = Math.max(nowTick.value - savedAt, 0)
+  const label = store.lastSaveMode === 'manual' ? '手动保存' : '自动保存'
+  if (elapsedMs < 2_000) return `刚刚${label}`
+  if (elapsedMs < 60_000) return `${Math.floor(elapsedMs / 1000)}秒前${label}`
+  return `${Math.floor(elapsedMs / 60_000)}分钟前${label}`
+})
+
 const isDefaultOrder = computed(() => store.isDefaultModuleOrder())
 
 function handleResetOrder() {
@@ -182,11 +210,53 @@ function moveDown(key: string) {
   store.moveModule(key, 'down')
 }
 
+function handleSwitchDragStart(event: DragEvent, key: string) {
+  if (key === 'basicInfo') {
+    event.preventDefault()
+    return
+  }
+  draggingModuleKey.value = key
+  event.dataTransfer?.setData('text/plain', key)
+  if (event.dataTransfer) {
+    event.dataTransfer.effectAllowed = 'move'
+  }
+}
+
+function handleSwitchDragOver(event: DragEvent, key: string) {
+  if (!draggingModuleKey.value || draggingModuleKey.value === key) return
+  event.preventDefault()
+  dragOverModuleKey.value = key
+  if (event.dataTransfer) {
+    event.dataTransfer.dropEffect = 'move'
+  }
+}
+
+function handleSwitchDrop(targetKey: string) {
+  const sourceKey = draggingModuleKey.value
+  if (!sourceKey || sourceKey === targetKey) return
+  store.reorderModule(sourceKey, targetKey)
+  dragOverModuleKey.value = null
+}
+
+function handleSwitchDragEnd() {
+  draggingModuleKey.value = null
+  dragOverModuleKey.value = null
+}
+
+let autoSaveTicker: ReturnType<typeof setInterval> | null = null
+
 onMounted(() => {
+  autoSaveTicker = setInterval(() => {
+    nowTick.value = Date.now()
+  }, 200)
   document.addEventListener('mousedown', handleDocumentPointerDown)
 })
 
 onUnmounted(() => {
+  if (autoSaveTicker) {
+    clearInterval(autoSaveTicker)
+    autoSaveTicker = null
+  }
   document.removeEventListener('mousedown', handleDocumentPointerDown)
 })
 </script>
@@ -195,7 +265,20 @@ onUnmounted(() => {
   <main class="editor-panel">
     <div class="editor-toolbar">
       <input v-model="searchValue" class="search-input" placeholder="搜索模块：基本信息 / 教育经历 / 专业技能" />
-      <span class="chip">自动保存中</span>
+      <span
+        class="chip"
+        :class="{ 'chip-pending': isAutoSavePending, 'chip-saving': store.isSaving }"
+        :title="autoSaveChipText"
+        :aria-label="autoSaveChipText"
+        role="status"
+        aria-live="polite"
+      >
+        <span v-if="store.isSaving" class="chip-loading" aria-hidden="true"></span>
+        <svg v-else class="chip-status-icon" viewBox="0 0 24 24" aria-hidden="true">
+          <path d="M12 7v5l3 2" />
+          <circle cx="12" cy="12" r="8" />
+        </svg>
+      </span>
     </div>
 
     <div ref="moduleMenuRef" class="floating-tools">
@@ -214,15 +297,42 @@ onUnmounted(() => {
             <span class="floating-badge">{{ visibleCount }}</span>
           </button>
           <div v-if="moduleMenuOpen" class="module-switch-popover">
-            <p class="module-switch-popover-title">选择展示模块</p>
+            <div class="module-switch-popover-header">
+              <p class="module-switch-popover-title">选择展示模块</p>
+              <button
+                class="btn-reset-order-icon"
+                type="button"
+                :disabled="isDefaultOrder"
+                aria-label="恢复默认顺序"
+                title="恢复默认顺序"
+                @click="handleResetOrder"
+              >
+                <svg viewBox="0 0 24 24" aria-hidden="true">
+                  <path d="M20 11a8 8 0 1 1-2.34-5.66" />
+                  <path d="M20 4v7h-7" />
+                </svg>
+              </button>
+            </div>
             <ul class="module-switch-list">
               <li
                 v-for="mod in store.modules"
                 :key="`switch-${mod.key}`"
                 class="module-switch-item"
-                :class="{ active: mod.visible, muted: !mod.visible }"
+                :class="{
+                  active: mod.visible,
+                  muted: !mod.visible,
+                  draggable: mod.key !== 'basicInfo',
+                  dragging: draggingModuleKey === mod.key,
+                  'drag-over': dragOverModuleKey === mod.key,
+                }"
+                :draggable="mod.key !== 'basicInfo'"
+                @dragstart="handleSwitchDragStart($event, mod.key)"
+                @dragover="handleSwitchDragOver($event, mod.key)"
+                @drop.prevent="handleSwitchDrop(mod.key)"
+                @dragend="handleSwitchDragEnd"
               >
                 <div class="module-switch-info">
+                  <span v-if="mod.key !== 'basicInfo'" class="drag-handle" aria-hidden="true" title="拖拽排序">⋮⋮</span>
                   <span class="module-switch-icon" aria-hidden="true">
                     <svg class="module-switch-icon-svg" :viewBox="MODULE_ICON_VIEWBOX">
                       <path v-for="(d, idx) in moduleIconPaths(mod.key)" :key="`switch-${mod.key}-${idx}`" :d="d" />
@@ -231,15 +341,21 @@ onUnmounted(() => {
                   <span class="module-switch-label">{{ mod.label }}</span>
                 </div>
 
-                <label class="toggle-switch">
-                  <input
-                    type="checkbox"
-                    :checked="mod.visible"
-                    :aria-label="`${mod.label}开关`"
-                    @change="store.toggleModule(mod.key)"
-                  />
-                  <span class="toggle-slider"></span>
-                </label>
+                <div class="module-switch-actions">
+                  <div v-if="mod.key !== 'basicInfo' && mod.visible" class="order-actions order-actions-switch">
+                    <button class="order-btn" :disabled="!canMoveUp(mod.key)" @click.stop="moveUp(mod.key)">↑</button>
+                    <button class="order-btn" :disabled="!canMoveDown(mod.key)" @click.stop="moveDown(mod.key)">↓</button>
+                  </div>
+                  <label class="toggle-switch">
+                    <input
+                      type="checkbox"
+                      :checked="mod.visible"
+                      :aria-label="`${mod.label}开关`"
+                      @change="store.toggleModule(mod.key)"
+                    />
+                    <span class="toggle-slider"></span>
+                  </label>
+                </div>
               </li>
             </ul>
           </div>
@@ -271,7 +387,6 @@ onUnmounted(() => {
       <div class="info-editor-header">
         <h2 class="editor-title">信息编辑区</h2>
         <div class="editor-header-actions">
-          <button class="btn-reset-order" :disabled="isDefaultOrder" @click="handleResetOrder">恢复默认顺序</button>
           <button class="btn-save" @click="handleSave">保存草稿</button>
         </div>
       </div>
@@ -297,10 +412,6 @@ onUnmounted(() => {
 	              <span class="module-head-title">{{ mod.label }}</span>
 	            </div>
             <div class="module-head-right">
-              <div v-if="mod.key !== 'basicInfo' && mod.visible" class="order-actions">
-                <button class="order-btn" :disabled="!canMoveUp(mod.key)" @click.stop="moveUp(mod.key)">↑</button>
-                <button class="order-btn" :disabled="!canMoveDown(mod.key)" @click.stop="moveDown(mod.key)">↓</button>
-              </div>
               <span v-if="!mod.visible" class="disabled-tag">已关闭</span>
               <span class="expand-text">{{ expanded[mod.key] && mod.visible ? '收起' : '展开' }} ▸</span>
             </div>
@@ -367,16 +478,109 @@ onUnmounted(() => {
 }
 
 .chip {
+  position: relative;
+  overflow: hidden;
+  width: 40px;
   height: 40px;
-  padding: 0 12px;
+  padding: 0;
   border-radius: 8px;
   background: #efe7dc;
   color: #7b6a5b;
   display: inline-flex;
   align-items: center;
+  justify-content: center;
   font-size: 12px;
   font-weight: 600;
   white-space: nowrap;
+  transition: background-color 0.2s ease, color 0.2s ease;
+  animation: chip-breath 2.6s ease-in-out infinite;
+}
+
+.chip::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(
+    110deg,
+    rgba(255, 255, 255, 0) 0%,
+    rgba(255, 255, 255, 0.38) 44%,
+    rgba(255, 255, 255, 0) 72%
+  );
+  transform: translateX(-120%);
+  animation: chip-sheen 3.2s ease-in-out infinite;
+  pointer-events: none;
+}
+
+.chip-pending {
+  background: #fae8dc;
+  color: #b7633b;
+  animation-duration: 1.1s;
+}
+
+.chip-saving {
+  background: #ffe8d9;
+  color: #b54d1f;
+  animation: chip-blink 0.72s ease-in-out infinite;
+}
+
+.chip-loading {
+  flex-shrink: 0;
+  width: 15px;
+  height: 15px;
+  border-radius: 50%;
+  border: 2px solid rgba(181, 77, 31, 0.24);
+  border-top-color: #b54d1f;
+  animation: chip-spin 0.75s linear infinite;
+}
+
+.chip-status-icon {
+  width: 16px;
+  height: 16px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.8;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+@keyframes chip-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@keyframes chip-breath {
+  0%,
+  100% {
+    opacity: 0.96;
+  }
+
+  50% {
+    opacity: 0.78;
+  }
+}
+
+@keyframes chip-sheen {
+  0%,
+  64%,
+  100% {
+    transform: translateX(-120%);
+  }
+
+  88% {
+    transform: translateX(150%);
+  }
+}
+
+@keyframes chip-blink {
+  0%,
+  100% {
+    opacity: 1;
+  }
+
+  50% {
+    opacity: 0.55;
+  }
 }
 
 .btn-export {
@@ -529,7 +733,48 @@ onUnmounted(() => {
   color: #8a7461;
   font-size: 12px;
   font-weight: 700;
+}
+
+.module-switch-popover-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
   margin-bottom: 8px;
+}
+
+.btn-reset-order-icon {
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  border: 1px solid #ddcfbf;
+  border-radius: 8px;
+  background: #fff;
+  color: #8a7461;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+}
+
+.btn-reset-order-icon svg {
+  width: 14px;
+  height: 14px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.btn-reset-order-icon:hover:not(:disabled) {
+  border-color: #d97745;
+  color: #d97745;
+}
+
+.btn-reset-order-icon:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
 }
 
 .module-switch-list {
@@ -545,11 +790,20 @@ onUnmounted(() => {
   display: flex;
   align-items: center;
   justify-content: space-between;
+  gap: 8px;
   border-radius: 10px;
   padding: 10px 12px;
   border: 1px solid transparent;
   background: #f2ece5;
   transition: all 0.18s ease;
+}
+
+.module-switch-item.draggable {
+  cursor: grab;
+}
+
+.module-switch-item.draggable:active {
+  cursor: grabbing;
 }
 
 .module-switch-item.active {
@@ -561,11 +815,28 @@ onUnmounted(() => {
   opacity: 0.9;
 }
 
+.module-switch-item.dragging {
+  opacity: 0.5;
+}
+
+.module-switch-item.drag-over {
+  border-color: #d97745;
+  box-shadow: 0 0 0 1px rgba(217, 119, 69, 0.2) inset;
+}
+
 .module-switch-info {
   display: flex;
   align-items: center;
   gap: 10px;
   min-width: 0;
+}
+
+.drag-handle {
+  color: #a08c7b;
+  letter-spacing: -1px;
+  font-size: 13px;
+  line-height: 1;
+  flex-shrink: 0;
 }
 
 .module-switch-icon {
@@ -598,6 +869,13 @@ onUnmounted(() => {
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+}
+
+.module-switch-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
 }
 
 .toggle-switch {
@@ -685,28 +963,6 @@ onUnmounted(() => {
   cursor: pointer;
 }
 
-.btn-reset-order {
-  border: 1px solid #ddcfbf;
-  height: 36px;
-  padding: 0 12px;
-  border-radius: 8px;
-  background: #fff;
-  color: #8a7461;
-  font-size: 12px;
-  font-weight: 600;
-  cursor: pointer;
-}
-
-.btn-reset-order:hover:not(:disabled) {
-  border-color: #d97745;
-  color: #d97745;
-}
-
-.btn-reset-order:disabled {
-  opacity: 0.55;
-  cursor: not-allowed;
-}
-
 .save-hint {
   margin-top: 6px;
   color: #d97745;
@@ -787,6 +1043,10 @@ onUnmounted(() => {
   display: inline-flex;
   align-items: center;
   gap: 4px;
+}
+
+.order-actions-switch {
+  margin-right: 2px;
 }
 
 .order-btn {
@@ -876,19 +1136,6 @@ onUnmounted(() => {
 @container (max-width: 560px) {
   .chip {
     display: none;
-  }
-
-  .floating-tools {
-    position: fixed;
-    right: 18px;
-    bottom: 18px;
-    top: auto;
-    height: auto;
-    margin-right: 0;
-  }
-
-  .floating-tools-stack {
-    transform: none;
   }
 
   .module-switch-popover {

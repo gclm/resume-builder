@@ -37,6 +37,24 @@
 - 快捷输入：`Enter` 发送，`Ctrl + Enter` 换行。
 - 面试结束后输出综合评分（含分项得分与改进建议）。
 
+## 界面截图
+
+### 模板选择
+
+![模板选择界面](docs/screenshots/select-template.png)
+
+### 简历编辑
+
+![简历编辑界面](docs/screenshots/edit.png)
+
+### AI 优化
+
+![AI 优化界面](docs/screenshots/ai-optimized.png)
+
+### AI 面试
+
+![AI 面试界面](docs/screenshots/ai-interview.png)
+
 ## 内置模板
 
 - 默认模板

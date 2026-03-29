@@ -260,18 +260,82 @@ export interface ParsedAiResponse {
   optimizedContent: string
 }
 
+type ParsedSectionKey = 'suggestions' | 'optimizedContent'
+
+function normalizeSectionLabel(rawLabel: string): ParsedSectionKey | null {
+  const normalized = rawLabel
+    .trim()
+    .toLowerCase()
+    .replace(/\s+/g, '')
+
+  if (normalized === '优化建议' || normalized === 'suggestion' || normalized === 'suggestions') {
+    return 'suggestions'
+  }
+  if (
+    normalized === '优化后内容'
+    || normalized === '优化后的内容'
+    || normalized === 'optimizedcontent'
+  ) {
+    return 'optimizedContent'
+  }
+  return null
+}
+
+function parseSectionHeadingLine(line: string): { key: ParsedSectionKey; inlineContent: string } | null {
+  const match = line.match(
+    /^(?:#{1,6}\s*)?(?:\*\*)?\s*(优化建议|Suggestions?|优化后内容|优化后的内容|Optimized Content)\s*(?:\*\*)?\s*(?:[：:]\s*(.*))?$/i,
+  )
+  if (!match) return null
+  const key = normalizeSectionLabel(match[1] ?? '')
+  if (!key) return null
+  return {
+    key,
+    inlineContent: (match[2] ?? '').trim(),
+  }
+}
+
 export function parseAiResponse(text: string): ParsedAiResponse {
-  const normalized = text.replace(/\r\n/g, '\n')
-  const suggestionsMatch = normalized.match(
-    /##\s*(?:优化建议|Suggestions?)\s*\n([\s\S]*?)(?=##\s*(?:优化后内容|Optimized Content)|$)/i,
-  )
-  const contentMatch = normalized.match(
-    /##\s*(?:优化后内容|Optimized Content)\s*\n([\s\S]*)/i,
-  )
+  const normalized = text.replace(/\r\n/g, '\n').trim()
+  if (!normalized) {
+    return { suggestions: '', optimizedContent: '' }
+  }
+
+  const lines = normalized.split('\n')
+  const sections: Record<ParsedSectionKey, string[]> = {
+    suggestions: [],
+    optimizedContent: [],
+  }
+
+  let currentSection: ParsedSectionKey | null = null
+
+  for (const line of lines) {
+    const heading = parseSectionHeadingLine(line.trim())
+    if (heading) {
+      currentSection = heading.key
+      if (heading.inlineContent) {
+        sections[currentSection].push(heading.inlineContent)
+      }
+      continue
+    }
+
+    if (currentSection) {
+      sections[currentSection].push(line)
+    }
+  }
+
+  const suggestions = sections.suggestions.join('\n').trim()
+  const optimizedContent = sections.optimizedContent.join('\n').trim()
+
+  if (!suggestions && !optimizedContent) {
+    return {
+      suggestions: '',
+      optimizedContent: normalized,
+    }
+  }
 
   return {
-    suggestions: suggestionsMatch?.[1]?.trim() ?? '',
-    optimizedContent: contentMatch?.[1]?.trim() ?? '',
+    suggestions,
+    optimizedContent,
   }
 }
 

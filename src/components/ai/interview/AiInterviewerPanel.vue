@@ -521,14 +521,19 @@ onUnmounted(() => {
       </div>
 
       <div class="top-actions">
-        <button class="interview-config-btn" type="button" @click="showAiConfig = true">
+        <button
+          class="interview-config-btn"
+          type="button"
+          :data-model-tooltip="aiConfig.isConfigured ? aiConfig.modelName : '配置模型'"
+          @click="showAiConfig = true"
+        >
           <svg class="config-icon" viewBox="0 0 24 24" aria-hidden="true">
             <circle cx="12" cy="12" r="3" />
             <path
               d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"
             />
           </svg>
-          <span>{{ aiConfig.isConfigured ? aiConfig.modelName : '配置模型' }}</span>
+          <span class="interview-config-btn-text">{{ aiConfig.isConfigured ? aiConfig.modelName : '配置模型' }}</span>
         </button>
         <button class="top-btn" type="button" @click="showResumePreview = !showResumePreview">
           {{ showResumePreview ? '收起简历' : '查看简历' }}
@@ -633,6 +638,7 @@ onUnmounted(() => {
 }
 
 .interview-config-btn {
+  position: relative;
   height: 30px;
   padding: 0 10px;
   border-radius: 7px;
@@ -647,13 +653,63 @@ onUnmounted(() => {
   gap: 5px;
   white-space: nowrap;
   max-width: 260px;
+  overflow: visible;
+}
+
+.interview-config-btn-text {
+  flex: 1;
+  min-width: 0;
+  display: inline-block;
+  white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
 }
 
-.interview-config-btn > span {
-  overflow: hidden;
-  text-overflow: ellipsis;
+.interview-config-btn::before,
+.interview-config-btn::after {
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.15s ease, transform 0.15s ease;
+}
+
+.interview-config-btn::before {
+  content: '';
+  position: absolute;
+  left: 50%;
+  top: calc(100% + 3px);
+  transform: translate(-50%, -6px);
+  border: 5px solid transparent;
+  border-bottom-color: #2d2521;
+  z-index: 80;
+}
+
+.interview-config-btn::after {
+  content: attr(data-model-tooltip);
+  position: absolute;
+  left: 50%;
+  top: calc(100% + 8px);
+  transform: translate(-50%, -6px);
+  width: max-content;
+  max-width: min(760px, 90vw);
+  padding: 6px 8px;
+  border-radius: 6px;
+  background: #2d2521;
+  color: #fff;
+  font-size: 12px;
+  font-weight: 500;
+  line-height: 1.35;
+  white-space: nowrap;
+  word-break: normal;
+  overflow-wrap: anywhere;
+  z-index: 81;
+}
+
+.interview-config-btn:hover::before,
+.interview-config-btn:hover::after,
+.interview-config-btn:focus-visible::before,
+.interview-config-btn:focus-visible::after {
+  opacity: 1;
+  transform: translate(-50%, 0);
 }
 
 .interview-config-btn:hover {

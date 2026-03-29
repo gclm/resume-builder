@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { ref, computed } from 'vue'
 import MarkdownIt from 'markdown-it'
-import type { ProjectEntry, WorkEntry } from '@/stores/resume'
+import type { AwardEntry, ProjectEntry, WorkEntry } from '@/stores/resume'
 import { useResumeStore } from '@/stores/resume'
 import { useAiConfigStore } from '@/stores/aiConfig'
 import {
@@ -30,6 +30,7 @@ type ApplyUndoSnapshot = {
   previousWorkDescriptions?: string[]
   previousProjectIntroductions?: string[]
   previousProjectMainWorks?: string[]
+  previousAwards?: AwardEntry[]
   previousIntroduction?: string
   hadEntry?: boolean
   createdAwardId?: string
@@ -52,7 +53,15 @@ const markdown = new MarkdownIt({
 
 const parsed = computed(() => parseAiResponse(streamText.value))
 const renderedSuggestions = computed(() => markdown.render(parsed.value.suggestions || ''))
-const renderedOptimizedContent = computed(() => markdown.render(parsed.value.optimizedContent || ''))
+const resolvedOptimizedContent = computed(() => {
+  const optimized = parsed.value.optimizedContent.trim()
+  if (optimized) return optimized
+  if (selectedModule.value === 'selfIntro') {
+    return parsed.value.suggestions.trim()
+  }
+  return ''
+})
+const renderedOptimizedContent = computed(() => markdown.render(resolvedOptimizedContent.value || ''))
 const applySupportedModules = new Set(['skills', 'selfIntro', 'workExperience', 'projectExperience', 'awards'])
 const canApplySelectedModule = computed(() => applySupportedModules.has(selectedModule.value))
 const canUndoSelectedModule = computed(() => {
@@ -566,6 +575,182 @@ function parseWorkOptimizedContent(markdownText: string, workList: WorkEntry[]):
   return sections
 }
 
+type ParsedAwardSection = {
+  name: string
+  date: string
+  description: string
+}
+
+function normalizeAwardDate(rawDate: string): string {
+  const trimmed = rawDate.trim()
+  if (!trimmed) return ''
+
+  const strictMonth = trimmed.match(/^((?:19|20)\d{2})-(0[1-9]|1[0-2])$/)
+  if (strictMonth) return strictMonth[0]
+
+  const compactMonth = trimmed.match(/^((?:19|20)\d{2})(0[1-9]|1[0-2])$/)
+  if (compactMonth) return `${compactMonth[1]}-${compactMonth[2]}`
+
+  const looseMonth = trimmed.match(/((?:19|20)\d{2})\s*[年./-]\s*(0?[1-9]|1[0-2])(?:\s*月)?/)
+  if (looseMonth) {
+    const year = looseMonth[1]
+    const month = looseMonth[2]
+    if (year && month) {
+      return `${year}-${month.padStart(2, '0')}`
+    }
+  }
+
+  return ''
+}
+
+function parseAwardFieldLine(line: string): { field: 'name' | 'date' | 'description'; value: string } | null {
+  const plain = stripMarkdownDecorators(line).trim()
+  if (!plain) return null
+
+  const nameMatch = plain.match(/^(?:奖项名称|奖项|名称)\s*[：:]\s*(.+)$/)
+  if (nameMatch?.[1]) {
+    return { field: 'name', value: nameMatch[1].trim() }
+  }
+
+  const dateMatch = plain.match(/^(?:获奖时间|时间|日期)\s*[：:]\s*(.+)$/)
+  if (dateMatch?.[1]) {
+    return { field: 'date', value: dateMatch[1].trim() }
+  }
+
+  const descriptionMatch = plain.match(/^(?:描述|说明|奖项描述)\s*[：:]\s*(.*)$/)
+  if (descriptionMatch) {
+    return { field: 'description', value: descriptionMatch[1]?.trim() ?? '' }
+  }
+
+  return null
+}
+
+function parseInlineAwardNameAndDate(line: string): { name: string; date: string } | null {
+  const trimmed = line.trim()
+  if (!/^([-*+]\s+|\d+\.\s+)/.test(trimmed)) return null
+  const plain = stripMarkdownDecorators(trimmed)
+  if (!plain || /[：:]/.test(plain)) return null
+
+  const dateMatch = plain.match(/((?:19|20)\d{2}\s*[年./-]\s*(?:0?[1-9]|1[0-2])(?:\s*月)?)/)
+  const normalizedDate = normalizeAwardDate(dateMatch?.[1] ?? '')
+  let name = plain
+  if (dateMatch?.[0]) {
+    name = name.replace(dateMatch[0], '')
+  }
+  name = name
+    .replace(/[()（）[\]【】]/g, ' ')
+    .replace(/\s{2,}/g, ' ')
+    .trim()
+
+  if (!name) return null
+  return {
+    name,
+    date: normalizedDate,
+  }
+}
+
+function parseAwardOptimizedSections(markdownText: string): ParsedAwardSection[] {
+  const lines = markdownText.replace(/\r\n/g, '\n').split('\n')
+  const sections: ParsedAwardSection[] = []
+  let current: ParsedAwardSection = { name: '', date: '', description: '' }
+
+  const appendDescription = (line: string) => {
+    const trimmed = line.trim()
+    if (!trimmed) return
+    current.description = current.description ? `${current.description}\n${trimmed}` : trimmed
+  }
+
+  const hasCurrentContent = (): boolean => {
+    if (current.name.trim() || current.date.trim()) return true
+    return Boolean(stripMarkdownDecorators(current.description).trim())
+  }
+
+  const flush = () => {
+    if (!hasCurrentContent()) {
+      current = { name: '', date: '', description: '' }
+      return
+    }
+    sections.push({
+      name: current.name.trim(),
+      date: current.date.trim(),
+      description: current.description.trim(),
+    })
+    current = { name: '', date: '', description: '' }
+  }
+
+  for (const rawLine of lines) {
+    const line = rawLine.trim()
+    if (!line) continue
+
+    const plain = stripMarkdownDecorators(line).replace(/[：:]$/, '').trim()
+    const isDivider = /^[-=]{3,}$/.test(line)
+    const isSectionHeading = /^#{1,6}\s*/.test(line) && /^(奖项|荣誉)/.test(plain)
+    if (isDivider || isSectionHeading) {
+      flush()
+      continue
+    }
+
+    const field = parseAwardFieldLine(line)
+    if (field) {
+      if (field.field === 'name' && current.name.trim()) {
+        flush()
+      }
+      if (field.field === 'name') {
+        current.name = field.value
+      } else if (field.field === 'date') {
+        const normalizedDate = normalizeAwardDate(field.value)
+        if (normalizedDate) {
+          current.date = normalizedDate
+        }
+      } else if (field.field === 'description') {
+        appendDescription(field.value)
+      }
+      continue
+    }
+
+    const inlineAward = parseInlineAwardNameAndDate(line)
+    if (inlineAward && !current.description.trim()) {
+      if (current.name.trim()) {
+        flush()
+      }
+      current.name = inlineAward.name
+      if (inlineAward.date) {
+        current.date = inlineAward.date
+      }
+      continue
+    }
+
+    appendDescription(line)
+  }
+
+  flush()
+
+  if (sections.length > 0) {
+    return sections
+  }
+
+  const fallbackAwards = lines
+    .map((line) => parseInlineAwardNameAndDate(line))
+    .filter((entry): entry is { name: string; date: string } => Boolean(entry?.name))
+    .map((entry) => ({
+      name: entry.name,
+      date: entry.date,
+      description: '',
+    }))
+
+  if (fallbackAwards.length > 0) {
+    return fallbackAwards
+  }
+
+  const normalizedDescription = normalizeMarkdownListContent(markdownText)
+  if (!normalizedDescription) return []
+  return [{
+    name: '',
+    date: '',
+    description: normalizedDescription,
+  }]
+}
+
 function detectPreferredListTypeFromHtml(html: string): PreferredListType | null {
   const firstListTagMatch = html.match(/<(ol|ul)\b/i)
   if (!firstListTagMatch?.[1]) return null
@@ -656,6 +841,15 @@ function renderProjectMainWorkWithOriginalStyle(sectionMarkdown: string, origina
   return applyPreferredFontSizeToHtml(listTypeFixed, preferredFontSize)
 }
 
+function renderAwardDescriptionWithOriginalStyle(sectionMarkdown: string, originalHtml: string): string {
+  const preferredListType = detectPreferredListTypeFromHtml(originalHtml)
+  const preferredFontSize = extractPreferredFontSizeFromHtml(originalHtml)
+  const normalizedListMarkdown = normalizeMarkdownListType(sectionMarkdown, preferredListType)
+  const rendered = markdown.render(normalizedListMarkdown)
+  const listTypeFixed = forceHtmlListType(rendered, preferredListType)
+  return applyPreferredFontSizeToHtml(listTypeFixed, preferredFontSize)
+}
+
 function getModuleData(): ModuleData {
   return {
     basicInfo: { ...resumeStore.basicInfo },
@@ -714,9 +908,9 @@ function handleStop() {
 }
 
 function handleApply() {
-  if (!parsed.value.optimizedContent || !selectedModule.value) return
+  if (!resolvedOptimizedContent.value || !selectedModule.value) return
 
-  const cleaned = removeLeadingModuleTitle(parsed.value.optimizedContent, selectedModule.value)
+  const cleaned = removeLeadingModuleTitle(resolvedOptimizedContent.value, selectedModule.value)
   const normalized = normalizeMarkdownListContent(cleaned)
   const sanitized = sanitizeMarkdownForRender(normalized)
   const content = markdown.render(sanitized)
@@ -802,24 +996,40 @@ function handleApply() {
       }
       break
     case 'awards':
-      if (resumeStore.awardList.length > 0 && resumeStore.awardList[0]) {
-        undoSnapshot = {
-          previousContent: resumeStore.awardList[0].description,
-          hadEntry: true,
-        }
-        resumeStore.awardList[0].description = content
+      undoSnapshot = {
+        previousContent: resumeStore.awardList[0]?.description ?? '',
+        previousAwards: resumeStore.awardList.map((award) => ({ ...award })),
+      }
+      const parsedAwards = parseAwardOptimizedSections(sanitized)
+      if (parsedAwards.length > 0) {
+        const now = Date.now()
+        const nextAwards = parsedAwards.map((award, index) => {
+          const existing = resumeStore.awardList[index]
+          const normalizedDescription = normalizeMarkdownListContent(award.description)
+          const renderedDescription = normalizedDescription
+            ? renderAwardDescriptionWithOriginalStyle(
+              sanitizeMarkdownForRender(normalizedDescription),
+              existing?.description ?? '',
+            )
+            : ''
+          const normalizedDate = normalizeAwardDate(award.date)
+          return {
+            id: existing?.id ?? `ai_award_${now}_${index + 1}`,
+            name: award.name || existing?.name || `奖项 ${index + 1}`,
+            date: normalizedDate || existing?.date || '',
+            description: renderedDescription,
+          }
+        })
+        resumeStore.awardList.splice(0, resumeStore.awardList.length, ...nextAwards)
         applied = true
-      } else {
-        const createdAwardId = `ai_${Date.now()}`
-        undoSnapshot = {
-          previousContent: '',
-          hadEntry: false,
-          createdAwardId,
-        }
-        resumeStore.awardList.push({
-          id: createdAwardId,
-          name: 'AI 优化内容',
-          date: '',
+      } else if (content.trim()) {
+        const existing = resumeStore.awardList[0]
+        const fallbackId = existing?.id ?? `ai_award_${Date.now()}_1`
+        const fallbackName = existing?.name || '荣誉奖项'
+        resumeStore.awardList.splice(0, resumeStore.awardList.length, {
+          id: fallbackId,
+          name: fallbackName,
+          date: existing?.date ?? '',
           description: content,
         })
         applied = true
@@ -888,7 +1098,13 @@ function handleUndoApply() {
       }
       break
     case 'awards':
-      if (snapshot.hadEntry === false) {
+      if (snapshot.previousAwards) {
+        resumeStore.awardList.splice(
+          0,
+          resumeStore.awardList.length,
+          ...snapshot.previousAwards.map((award) => ({ ...award })),
+        )
+      } else if (snapshot.hadEntry === false) {
         const createdId = snapshot.createdAwardId
         if (createdId) {
           const index = resumeStore.awardList.findIndex((a) => a.id === createdId)
@@ -939,12 +1155,16 @@ function handleReset() {
             <h3 class="panel-title">AI 优化建议</h3>
           </div>
           <div class="panel-header-right">
-            <button class="config-btn" @click="emit('open-config')">
+            <button
+              class="config-btn"
+              :data-model-tooltip="aiConfig.modelName || '配置模型'"
+              @click="emit('open-config')"
+            >
               <svg class="icon-xs" viewBox="0 0 24 24" aria-hidden="true">
                 <circle cx="12" cy="12" r="3" />
                 <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z" />
               </svg>
-              <span>{{ aiConfig.modelName || '配置' }}</span>
+              <span class="config-btn-text">{{ aiConfig.modelName || '配置' }}</span>
             </button>
             <button class="close-btn" @click="handleClose" aria-label="关闭">
               <svg class="icon-sm" viewBox="0 0 24 24" aria-hidden="true">
@@ -1044,7 +1264,7 @@ function handleReset() {
           </div>
 
           <!-- Optimized content -->
-          <div v-if="parsed.optimizedContent" class="result-card content-card">
+          <div v-if="resolvedOptimizedContent" class="result-card content-card">
             <div class="result-card-header">
               <h4 class="result-card-title">
                 <svg class="icon-xs" viewBox="0 0 24 24" aria-hidden="true">
@@ -1215,6 +1435,7 @@ function handleReset() {
 }
 
 .config-btn {
+  position: relative;
   height: 30px;
   padding: 0 10px;
   border-radius: 7px;
@@ -1229,8 +1450,63 @@ function handleReset() {
   gap: 5px;
   white-space: nowrap;
   max-width: 160px;
+  overflow: visible;
+}
+
+.config-btn-text {
+  flex: 1;
+  min-width: 0;
+  display: inline-block;
+  white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+}
+
+.config-btn::before,
+.config-btn::after {
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.15s ease, transform 0.15s ease;
+}
+
+.config-btn::before {
+  content: '';
+  position: absolute;
+  left: 50%;
+  top: calc(100% + 3px);
+  transform: translate(-50%, -6px);
+  border: 5px solid transparent;
+  border-bottom-color: #2d2521;
+  z-index: 60;
+}
+
+.config-btn::after {
+  content: attr(data-model-tooltip);
+  position: absolute;
+  left: 50%;
+  top: calc(100% + 8px);
+  transform: translate(-50%, -6px);
+  width: max-content;
+  max-width: min(680px, 88vw);
+  padding: 6px 8px;
+  border-radius: 6px;
+  background: #2d2521;
+  color: #fff;
+  font-size: 12px;
+  font-weight: 500;
+  line-height: 1.35;
+  white-space: nowrap;
+  word-break: normal;
+  overflow-wrap: anywhere;
+  z-index: 61;
+}
+
+.config-btn:hover::before,
+.config-btn:hover::after,
+.config-btn:focus-visible::before,
+.config-btn:focus-visible::after {
+  opacity: 1;
+  transform: translate(-50%, 0);
 }
 
 .config-btn:hover {

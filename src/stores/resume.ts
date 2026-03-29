@@ -168,6 +168,10 @@ export const useResumeStore = defineStore('resume', () => {
   const awardList = reactive<AwardEntry[]>([])
   const selfIntro = ref('')
   const selectedTemplateKey = ref<ResumeTemplateKey>('default')
+  const nextAutoSaveAt = ref<number | null>(null)
+  const lastSavedAt = ref<number | null>(null)
+  const lastSaveMode = ref<'auto' | 'manual' | null>(null)
+  const isSaving = ref(false)
 
   function toggleModule(key: string) {
     const mod = modules.find((m) => m.key === key)
@@ -198,6 +202,24 @@ export const useResumeStore = defineStore('resume', () => {
     if (!current || !next) return
     modules[idx] = next
     modules[target] = current
+  }
+
+  function reorderModule(sourceKey: string, targetKey: string) {
+    if (sourceKey === targetKey || sourceKey === 'basicInfo') return
+    const sourceIndex = modules.findIndex((m) => m.key === sourceKey)
+    const targetIndex = modules.findIndex((m) => m.key === targetKey)
+    if (sourceIndex < 0 || targetIndex < 0) return
+
+    const [sourceModule] = modules.splice(sourceIndex, 1)
+    if (!sourceModule) return
+
+    let nextIndex = targetKey === 'basicInfo' ? 1 : targetIndex
+    if (sourceIndex < targetIndex) {
+      nextIndex -= 1
+    }
+    nextIndex = Math.max(1, Math.min(nextIndex, modules.length))
+
+    modules.splice(nextIndex, 0, sourceModule)
   }
 
   function isDefaultModuleOrder(): boolean {
@@ -295,8 +317,26 @@ export const useResumeStore = defineStore('resume', () => {
   }
 
   const STORAGE_KEY = 'resume-builder-data'
+  const AUTO_SAVE_DELAY_MS = 500
+  const SAVE_LOADING_MIN_MS = 900
 
-  function saveToStorage() {
+  let saveLoadingTimer: ReturnType<typeof setTimeout> | null = null
+
+  function markSavingState() {
+    isSaving.value = true
+    if (saveLoadingTimer) clearTimeout(saveLoadingTimer)
+    saveLoadingTimer = setTimeout(() => {
+      isSaving.value = false
+      saveLoadingTimer = null
+    }, SAVE_LOADING_MIN_MS)
+  }
+
+  function saveToStorage(mode: 'auto' | 'manual' = 'manual') {
+    if (mode === 'manual' && saveTimer) {
+      clearTimeout(saveTimer)
+      saveTimer = null
+    }
+    markSavingState()
     const data = {
       modules: modules.map((m) => ({ ...m })),
       selectedTemplateKey: selectedTemplateKey.value,
@@ -309,6 +349,9 @@ export const useResumeStore = defineStore('resume', () => {
       selfIntro: selfIntro.value,
     }
     localStorage.setItem(STORAGE_KEY, JSON.stringify(data))
+    nextAutoSaveAt.value = null
+    lastSavedAt.value = Date.now()
+    lastSaveMode.value = mode
   }
 
   function loadFromStorage() {
@@ -383,7 +426,11 @@ export const useResumeStore = defineStore('resume', () => {
     ],
     () => {
       if (saveTimer) clearTimeout(saveTimer)
-      saveTimer = setTimeout(() => saveToStorage(), 500)
+      nextAutoSaveAt.value = Date.now() + AUTO_SAVE_DELAY_MS
+      saveTimer = setTimeout(() => {
+        saveTimer = null
+        saveToStorage('auto')
+      }, AUTO_SAVE_DELAY_MS)
     },
     { deep: true }
   )
@@ -402,6 +449,7 @@ export const useResumeStore = defineStore('resume', () => {
     setTemplate,
     canMoveModule,
     moveModule,
+    reorderModule,
     isDefaultModuleOrder,
     resetModuleOrder,
     isModuleVisible,
@@ -414,5 +462,10 @@ export const useResumeStore = defineStore('resume', () => {
     addAward,
     removeAward,
     saveToStorage,
+    autoSaveDelayMs: AUTO_SAVE_DELAY_MS,
+    nextAutoSaveAt,
+    lastSavedAt,
+    lastSaveMode,
+    isSaving,
   }
 })

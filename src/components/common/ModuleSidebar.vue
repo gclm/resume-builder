@@ -35,7 +35,9 @@ const primaryMenus = [
   <aside class="sidebar" :class="{ collapsed: props.collapsed }">
     <div class="brand">
       <div class="brand-left">
-        <span class="brand-mark"></span>
+        <span class="brand-logo-wrap" aria-hidden="true">
+          <img class="brand-logo" src="/favicon.svg?v=orange-black" alt="" />
+        </span>
         <span class="brand-text">Resume Builder</span>
       </div>
       <button
@@ -98,15 +100,26 @@ const primaryMenus = [
 .brand-left {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 12px;
   min-width: 0;
 }
 
-.brand-mark {
-  width: 12px;
-  height: 12px;
-  border-radius: 4px;
-  background: #d97745;
+.brand-logo-wrap {
+  width: 32px;
+  height: 32px;
+  border-radius: 9px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  overflow: hidden;
+  box-shadow: 0 0 0 1px rgba(45, 37, 33, 0.1);
+}
+
+.brand-logo {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
 }
 
 .brand-text {

@@ -15,6 +15,98 @@ const form = reactive({
 })
 
 const showToken = ref(false)
+const testing = ref(false)
+const testResult = ref<{ type: 'success' | 'error'; text: string } | null>(null)
+
+function normalizeApiUrl(raw: string): string {
+  let baseUrl = raw.trim().replace(/\/+$/, '')
+  if (!baseUrl.includes('/v1/chat/completions')) {
+    if (!baseUrl.endsWith('/v1')) baseUrl += '/v1'
+    baseUrl += '/chat/completions'
+  }
+  return baseUrl
+}
+
+function resetTestResult() {
+  testResult.value = null
+}
+
+function extractErrorText(text: string): string {
+  const cleaned = text.trim()
+  if (!cleaned) return ''
+  try {
+    const parsed = JSON.parse(cleaned) as { error?: { message?: string }; message?: string }
+    return parsed.error?.message?.trim() || parsed.message?.trim() || cleaned
+  } catch {
+    return cleaned
+  }
+}
+
+async function handleTestConnection() {
+  if (testing.value) return
+
+  const apiUrl = form.apiUrl.trim()
+  const apiToken = form.apiToken.trim()
+  const modelName = form.modelName.trim()
+
+  if (!apiUrl || !apiToken || !modelName) {
+    testResult.value = { type: 'error', text: '请先完整填写 API 地址、API Key 和模型名称。' }
+    return
+  }
+
+  testing.value = true
+  testResult.value = null
+
+  const controller = new AbortController()
+  const timeout = setTimeout(() => controller.abort(), 12_000)
+
+  try {
+    const response = await fetch(normalizeApiUrl(apiUrl), {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${apiToken}`,
+      },
+      body: JSON.stringify({
+        model: modelName,
+        messages: [{ role: 'user', content: 'ping' }],
+        stream: false,
+        temperature: 0,
+        max_tokens: 1,
+      }),
+      signal: controller.signal,
+    })
+
+    if (!response.ok) {
+      const errorText = extractErrorText(await response.text().catch(() => ''))
+      testResult.value = {
+        type: 'error',
+        text: `连接失败（${response.status}）：${errorText || response.statusText || '未知错误'}`,
+      }
+      return
+    }
+
+    const data = await response.json().catch(() => null)
+    const hasChoices = Array.isArray((data as { choices?: unknown[] } | null)?.choices)
+    if (!hasChoices) {
+      testResult.value = { type: 'error', text: '连接成功，但返回格式异常，请检查模型或服务兼容性。' }
+      return
+    }
+
+    testResult.value = { type: 'success', text: '连接成功，当前模型可用。' }
+  } catch (error: unknown) {
+    const message =
+      error instanceof DOMException && error.name === 'AbortError'
+        ? '请求超时，请检查 API 地址或网络。'
+        : error instanceof Error
+          ? error.message
+          : String(error ?? '未知错误')
+    testResult.value = { type: 'error', text: `连接失败：${message}` }
+  } finally {
+    clearTimeout(timeout)
+    testing.value = false
+  }
+}
 
 function handleSave() {
   store.updateConfig({
@@ -54,6 +146,7 @@ function handleCancel() {
             <label class="form-label">API 地址</label>
             <input
               v-model="form.apiUrl"
+              @input="resetTestResult"
               class="form-input"
               placeholder="例如：https://api.openai.com"
             />
@@ -66,6 +159,7 @@ function handleCancel() {
               <input
                 v-model="form.apiToken"
                 :type="showToken ? 'text' : 'password'"
+                @input="resetTestResult"
                 class="form-input"
                 placeholder="sk-..."
               />
@@ -88,15 +182,27 @@ function handleCancel() {
             <label class="form-label">模型名称</label>
             <input
               v-model="form.modelName"
+              @input="resetTestResult"
               class="form-input"
               placeholder="例如：gpt-4o / claude-3.5-sonnet / deepseek-chat"
             />
           </div>
         </div>
 
+        <p
+          v-if="testResult"
+          class="test-result"
+          :class="testResult.type === 'success' ? 'test-result-success' : 'test-result-error'"
+        >
+          {{ testResult.text }}
+        </p>
+
         <div class="dialog-footer">
           <button class="btn-cancel" @click="handleCancel">取消</button>
-          <button class="btn-save" @click="handleSave">保存配置</button>
+          <button class="btn-test" :disabled="testing" @click="handleTestConnection">
+            {{ testing ? '测试中...' : '测试连接' }}
+          </button>
+          <button class="btn-save" :disabled="testing" @click="handleSave">保存配置</button>
         </div>
       </div>
     </div>
@@ -285,6 +391,47 @@ function handleCancel() {
   gap: 8px;
 }
 
+.test-result {
+  margin: 0 24px 10px;
+  padding: 8px 10px;
+  border-radius: 8px;
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.test-result-success {
+  border: 1px solid #c8e6cf;
+  background: #eef8f1;
+  color: #2b7a45;
+}
+
+.test-result-error {
+  border: 1px solid #f0d2c8;
+  background: #fff1ec;
+  color: #b74a30;
+}
+
+.btn-test {
+  height: 38px;
+  padding: 0 18px;
+  border-radius: 8px;
+  border: 1px solid #d97745;
+  background: #fff;
+  color: #d97745;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.btn-test:hover:not(:disabled) {
+  background: #fff3eb;
+}
+
+.btn-test:disabled {
+  opacity: 0.65;
+  cursor: wait;
+}
+
 .btn-cancel {
   height: 38px;
   padding: 0 18px;
@@ -315,5 +462,10 @@ function handleCancel() {
 
 .btn-save:hover {
   background: #c96a3b;
+}
+
+.btn-save:disabled {
+  opacity: 0.65;
+  cursor: not-allowed;
 }
 </style>
