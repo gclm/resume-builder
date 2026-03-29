@@ -1,8 +1,6 @@
 import ResumeTemplate from './ResumeTemplate.vue'
-import { resolveTemplatePreviewImage } from '../previewImage'
 import type { ResumeTemplateDefinition } from '../types'
-
-const previewImage = resolveTemplatePreviewImage('../../../assets/templates/resume/workplace-general-preview.svg', import.meta.url)
+import previewImage from '../../../assets/templates/resume/workplace-general-preview.svg'
 
 export const WORKPLACE_GENERAL_TEMPLATE: ResumeTemplateDefinition = {
   key: 'workplace-general',

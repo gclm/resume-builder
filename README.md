@@ -155,6 +155,21 @@ npm run dev
 
 默认开发地址：`http://localhost:5173`
 
+## Docker 一键部署
+
+确保已安装 [Docker](https://www.docker.com/)，在项目根目录执行：
+
+```bash
+# 构建并启动
+docker compose up --build -d
+
+# 访问应用
+# http://localhost:3000
+
+# 停止并清理
+docker compose down
+```
+
 ## 常用脚本
 
 ```bash

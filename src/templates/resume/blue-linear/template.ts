@@ -1,8 +1,6 @@
 import ResumeTemplate from './ResumeTemplate.vue'
-import { resolveTemplatePreviewImage } from '../previewImage'
 import type { ResumeTemplateDefinition } from '../types'
-
-const previewImage = resolveTemplatePreviewImage('../../../assets/templates/resume/blue-linear-preview.svg', import.meta.url)
+import previewImage from '../../../assets/templates/resume/blue-linear-preview.svg'
 
 export const BLUE_LINEAR_TEMPLATE: ResumeTemplateDefinition = {
   key: 'blue-linear',

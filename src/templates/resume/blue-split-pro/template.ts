@@ -1,8 +1,6 @@
 import ResumeTemplate from './ResumeTemplate.vue'
-import { resolveTemplatePreviewImage } from '../previewImage'
 import type { ResumeTemplateDefinition } from '../types'
-
-const previewImage = resolveTemplatePreviewImage('../../../assets/templates/resume/blue-split-pro-preview.svg', import.meta.url)
+import previewImage from '../../../assets/templates/resume/blue-split-pro-preview.svg'
 
 export const BLUE_SPLIT_PRO_TEMPLATE: ResumeTemplateDefinition = {
   key: 'blue-split-pro',
