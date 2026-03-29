@@ -1,8 +1,6 @@
 import ResumeTemplate from './ResumeTemplate.vue'
-import { resolveTemplatePreviewImage } from '../previewImage'
 import type { ResumeTemplateDefinition } from '../types'
-
-const previewImage = resolveTemplatePreviewImage('../../../assets/templates/resume/default-preview.svg', import.meta.url)
+import previewImage from '../../../assets/templates/resume/default-preview.svg'
 
 export const DEFAULT_TEMPLATE: ResumeTemplateDefinition = {
   key: 'default',
