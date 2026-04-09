@@ -331,6 +331,20 @@ export const useResumeStore = defineStore('resume', () => {
     }, SAVE_LOADING_MIN_MS)
   }
 
+  function exportResumeData(): string {
+    return JSON.stringify({
+      modules: modules.map((m) => ({ ...m })),
+      selectedTemplateKey: selectedTemplateKey.value,
+      basicInfo: { ...basicInfo },
+      educationList: educationList.map((e) => ({ ...e })),
+      skills: skills.value,
+      workList: workList.map((w) => ({ ...w })),
+      projectList: projectList.map((p) => ({ ...p })),
+      awardList: awardList.map((a) => ({ ...a })),
+      selfIntro: selfIntro.value,
+    }, null, 2)
+  }
+
   function saveToStorage(mode: 'auto' | 'manual' = 'manual') {
     if (mode === 'manual' && saveTimer) {
       clearTimeout(saveTimer)
@@ -352,6 +366,13 @@ export const useResumeStore = defineStore('resume', () => {
     nextAutoSaveAt.value = null
     lastSavedAt.value = Date.now()
     lastSaveMode.value = mode
+  }
+
+  function importResumeData(raw: string) {
+    JSON.parse(raw)
+    localStorage.setItem(STORAGE_KEY, raw)
+    loadFromStorage()
+    saveToStorage('manual')
   }
 
   function loadFromStorage() {
@@ -461,6 +482,8 @@ export const useResumeStore = defineStore('resume', () => {
     removeProject,
     addAward,
     removeAward,
+    exportResumeData,
+    importResumeData,
     saveToStorage,
     autoSaveDelayMs: AUTO_SAVE_DELAY_MS,
     nextAutoSaveAt,

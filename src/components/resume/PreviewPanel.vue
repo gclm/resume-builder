@@ -19,6 +19,7 @@ type ExportQualityMode = 'compressed' | 'hd'
 const exportMenuOpen = ref(false)
 const exportMenuRef = ref<HTMLElement | null>(null)
 const templatePickerOpen = ref(false)
+const jsonImportInputRef = ref<HTMLInputElement | null>(null)
 
 const A4_WIDTH = 794
 const A4_RATIO = 297 / 210
@@ -163,6 +164,32 @@ function handleExportMarkdown() {
   downloadMarkdown(`${name}_简历.md`, md)
 }
 
+function handleExportJson() {
+  exportMenuOpen.value = false
+  const name = store.basicInfo.name?.trim() || '简历'
+  const blob = new Blob([store.exportResumeData()], {
+    type: 'application/json;charset=utf-8',
+  })
+  const url = URL.createObjectURL(blob)
+  const a = document.createElement('a')
+  a.href = url
+  a.download = `${name}_简历.json`
+  document.body.appendChild(a)
+  a.click()
+  document.body.removeChild(a)
+  URL.revokeObjectURL(url)
+}
+
+async function handleImportJson(event: Event) {
+  const input = event.target as HTMLInputElement
+  const file = input.files?.[0]
+  if (!file) return
+
+  const raw = await file.text()
+  input.value = ''
+  store.importResumeData(raw)
+}
+
 async function exportPDF(mode: ExportQualityMode) {
   if (!resumeRef.value) return
   exporting.value = true
@@ -289,6 +316,8 @@ async function exportPDF(mode: ExportQualityMode) {
           <button class="export-menu-item" @click="exportPDF('hd')">导出高清 PDF</button>
           <button class="export-menu-item" @click="exportPDF('compressed')">导出压缩 PDF</button>
           <button class="export-menu-item" @click="handleExportMarkdown">导出 Markdown</button>
+          <button class="export-menu-item" @click="handleExportJson">导出 JSON 进度</button>
+          <button class="export-menu-item" @click="exportMenuOpen = false; jsonImportInputRef?.click()">导入 JSON 进度</button>
         </div>
       </div>
     </div>
@@ -301,6 +330,13 @@ async function exportPDF(mode: ExportQualityMode) {
         <span class="export-progress-fill" :style="{ width: `${exportProgress}%` }"></span>
       </div>
     </div>
+    <input
+      ref="jsonImportInputRef"
+      type="file"
+      accept=".json,application/json"
+      style="display: none"
+      @change="handleImportJson"
+    />
 
     <TemplatePickerDialog
       v-model="templatePickerOpen"
