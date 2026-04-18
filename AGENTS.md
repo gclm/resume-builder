@@ -7,6 +7,7 @@
 2. `.rules/` 下规则文档与本文件共同构成仓库级强制约束；如无更高优先级用户指令，不得绕过。
 3. 当前必须遵守的规则文档如下：
    - `.rules/python-ai-backend-mandatory-rules.md`
+   - `.rules/harness-mcp-workflow-rules.md`
 4. 若后续 `.rules/` 目录新增规则文档，默认同样属于必须遵守的仓库规则；执行任务前应一并读取。
 
 本规范适用于本仓库内所有 AI 协作与自动化改动。
@@ -54,3 +55,23 @@
 1. 所有功能修复与优化，不得以“补测试代码”作为交付前置条件。
 2. 变更说明中必须记录验证方式与验证结果。
 3. 评审发现测试代码变更时，必须先移除再继续评审。
+
+## 协作参考文档
+
+1. `docs/harness-engineering-workflow.md`
+   - 仓库级 Harness Engineering 工作流，适用于任务路由、知识回写、熵治理与跨前后端协作时参考。
+
+## MCP 使用要求
+
+1. 涉及 OpenAI 能力、官方文档、模型选择、API 迁移与 SDK 接入时，必须优先按 `.rules/harness-mcp-workflow-rules.md` 使用 `openaiDeveloperDocs`。
+2. 涉及前端页面、交互、模板、流式渲染与视觉验证时，必须优先按 `.rules/harness-mcp-workflow-rules.md` 使用 `playwright`。
+3. 涉及 PR、Issue、Review、Checks 与远程协作上下文时，必须优先按 `.rules/harness-mcp-workflow-rules.md` 使用 `github`。
+4. `memory` 只能用于长期个人偏好，不得替代仓库规则、接口契约与项目事实。
+
+## 新功能开发要求
+
+1. 新功能、行为变更或多步骤优化任务，必须先按 `.rules/harness-mcp-workflow-rules.md` 输出细化任务清单，不得直接跳过拆分进入实现。
+2. 用户需求不清晰时，必须先提供一版初步任务 todo list 让用户澄清或确认。
+3. 在用户确认细化任务后，必须先生成验收细节 list 与需求文档 `.md`，再开始顺序执行。
+4. 执行时必须按细化任务顺序逐条完成，并在需求文档中同步标记状态。
+5. 全部细化任务完成后，必须按验收细节 list 对每一项给出 `通过` 或 `不通过` 结论；存在 `不通过` 时不得声称完成，必须修正并重新进行全量验收。

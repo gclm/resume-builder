@@ -1,0 +1,5 @@
+﻿# author: jf
+interface:
+  display_name: "Codex 审查 v2"
+  short_description: "按 v2.0 规则执行分级审查与评分"
+  default_prompt: "Use $code-review to review this project's code changes and output a scored summary in Chinese."

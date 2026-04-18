@@ -34,10 +34,10 @@
 
 ## 页面截图
 
-![模板选择](docs/screenshots/select-template.png)
-![简历编辑](docs/screenshots/edit.png)
-![AI 优化](docs/screenshots/ai-optimized.png)
-![AI 面试](docs/screenshots/ai-interview.png)
+![模板选择](screenshots/select-template.png)
+![简历编辑](screenshots/edit.png)
+![AI 优化](screenshots/ai-optimized.png)
+![AI 面试](screenshots/ai-interview.png)
 
 ## 技术栈
 
@@ -304,6 +304,14 @@ mysql -u root -p your_database < sql/interview_schema.sql
 - `resume-template-from-image`
 - `resume-backend-project-optimizer`
 - `resume-interview-coach`
+
+## Harness Workflow
+
+仓库级 Harness Engineering 工作流见 [docs/harness-engineering-workflow.md](docs/harness-engineering-workflow.md)。
+
+## 友情链接
+
+- [Linux.do](https://linux.do/)
 
 ## License
 
