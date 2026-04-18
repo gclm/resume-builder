@@ -1,0 +1,2 @@
+# author: jf
+"""Shared utilities."""

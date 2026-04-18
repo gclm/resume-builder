@@ -3,6 +3,8 @@
 
 Spring Boot 3 + Spring AI 后端服务，提供聊天、流式输出、语音转写、Realtime 临时密钥、面试会话与 RAG 能力。
 
+该后端与根目录下的 `python-ai-backend` 属于同一前端的两套可选实现，联调时二选一启动即可，不要同时占用 `8999` 端口。
+
 ## 技术栈
 
 - Java 21
@@ -20,10 +22,13 @@ Spring Boot 3 + Spring AI 后端服务，提供聊天、流式输出、语音转
 # 1) 复制环境变量模板
 cp .env.example .env
 
-# 2) 启动依赖数据库（MySQL + pgvector）
+# 2) 手工执行会话建表脚本
+mysql -u root -p your_database < ../sql/interview_schema.sql
+
+# 3) 启动依赖数据库（MySQL + pgvector）
 docker compose up -d
 
-# 3) 启动后端
+# 4) 启动后端
 mvn spring-boot:run
 ```
 
@@ -72,6 +77,18 @@ spring:
   config:
     import: optional:file:.env[.properties]
 ```
+
+### 5) 建表脚本
+
+AI 面试会话表与消息表初始化脚本放在项目根目录：
+
+`sql/interview_schema.sql`
+
+说明：
+
+- 该脚本需要开发者手工执行一次。
+- 应用启动时不会自动执行建表 SQL。
+- Python 后端也复用这份脚本，不再保留第二份会话建表文件。
 
 ## 与前端联调
 

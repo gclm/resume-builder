@@ -1,0 +1,2 @@
+# author: jf
+"""Persistence adapters."""

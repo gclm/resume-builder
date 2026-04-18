@@ -1,0 +1,8 @@
+# author: jf
+# Optional AI framework dependencies for full-feature mode.
+# Core service can run without these packages.
+langchain>=0.3.0,<1.0.0
+langgraph>=0.2.0,<1.0.0
+llama-index>=0.12.0,<1.0.0
+pyautogen>=0.2.0,<1.0.0
+pgvector>=0.3.0,<1.0.0
