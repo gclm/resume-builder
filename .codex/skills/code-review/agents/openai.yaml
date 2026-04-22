@@ -2,4 +2,4 @@
 interface:
   display_name: "Codex 审查 v2"
   short_description: "按 v2.0 规则执行分级审查与评分"
-  default_prompt: "Use $code-review to review this project's code changes and output a scored summary in Chinese."
+  default_prompt: "使用 $code-review 审查当前项目代码变更，终端输出与写入 code-review 报告的内容都必须使用中文。"

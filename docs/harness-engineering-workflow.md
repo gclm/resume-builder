@@ -153,7 +153,7 @@
 2. `spring-ai-backend/src/main/java/.../service`
 3. `spring-ai-backend/src/main/java/.../mapper`
 4. `spring-ai-backend/src/main/resources/mapper`
-5. `spring-ai-backend/sql/`
+5. `sql/`
 
 标准流程：
 

@@ -1,12 +1,14 @@
-﻿<script setup lang="ts">
+<!-- author: jf -->
+<script setup lang="ts">
 import { ref } from 'vue'
+import KnowledgeBasePanel from '@/components/ai/knowledge/KnowledgeBasePanel.vue'
+import AiInterviewerPanel from '@/components/ai/interview/AiInterviewerPanel.vue'
 import ModuleSidebar from '@/components/common/ModuleSidebar.vue'
 import EditorPanel from '@/components/resume/EditorPanel.vue'
 import PreviewPanel from '@/components/resume/PreviewPanel.vue'
-import AiInterviewerPanel from '@/components/ai/interview/AiInterviewerPanel.vue'
 
 const sidebarCollapsed = ref(false)
-type PrimaryMenuKey = 'resume-editor' | 'ai-interviewer'
+type PrimaryMenuKey = 'resume-editor' | 'ai-interviewer' | 'knowledge-base'
 const activeMenu = ref<PrimaryMenuKey>('resume-editor')
 
 function handleSelectMenu(key: PrimaryMenuKey) {
@@ -27,7 +29,8 @@ function handleSelectMenu(key: PrimaryMenuKey) {
         <EditorPanel />
         <PreviewPanel />
       </template>
-      <AiInterviewerPanel v-else />
+      <AiInterviewerPanel v-else-if="activeMenu === 'ai-interviewer'" />
+      <KnowledgeBasePanel v-else />
     </div>
   </div>
 </template>

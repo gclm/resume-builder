@@ -1,8 +1,9 @@
 ---
 name: code-review
-description: 用于当前项目的 Codex 代码审查与评分。适用于“代码审查、PR/MR review、质量评估、风险检查”等场景，要求按 v2.0 规范输出 P0/P1/P2、量化评分、星级和审查结论，并将结果写入根目录 code-review 文件夹。
+description: 用于当前项目的 Codex 代码审查与评分。适用于“代码审查、PR/MR review、质量评估、风险检查”等场景，要求按 v2.0 规范输出 P0/P1/P2、量化评分、星级和审查结论，并且终端结果与落盘报告都必须使用中文，结果写入根目录 code-review 文件夹。
 ---
 
+<!-- author: jf -->
 # Codex 代码审查技能 v2
 
 执行审查时遵循以下规则：
@@ -27,7 +28,7 @@ description: 用于当前项目的 Codex 代码审查与评分。适用于“代
    - `P1 = 🟡中等`
    - `P2 = 🟢轻微`
 9. 根据扣分规则计算总分并映射星级。
-10. 用标准模板给出最终总结与审查结论，并确保“终端输出内容”和“写入 md 文件内容”一致。
+10. 用标准模板给出最终总结与审查结论，并确保“终端输出内容”和“写入 md 文件内容”一致，且两者都必须使用中文。
 
 ## 检查建议
 
@@ -46,19 +47,20 @@ description: 用于当前项目的 Codex 代码审查与评分。适用于“代
 - 必须在报告中写明当前分支名、报告文件路径和最终评分。
 - 必须将最终审查结果落盘到 `code-review/{sanitized-branch-name}.md`。
 - 若 `code-review/` 不存在，应先创建后再写入报告。
+- 终端输出与落盘报告必须全程使用中文，标题、字段名、分组标题、总结与结论不得混用英文模板。
 - 若未发现问题，也要写明剩余风险和验证缺口。
 - 若命令未执行，必须写明原因，不能假装已验证。
 
 ## 建议输出结构
 
 ```markdown
-# Code Review - {branch-name}
+# 代码审查 - {branch-name}
 
-- Branch: `{branch-name}`
-- Report: `code-review/{sanitized-branch-name}.md`
-- Score: `85/100`
-- Stars: `⭐⭐⭐⭐`
-- Decision: `Approve with suggestions`
+- 分支：`{branch-name}`
+- 报告：`code-review/{sanitized-branch-name}.md`
+- 评分：`85/100`
+- 星级：`⭐⭐⭐⭐`
+- 结论：`建议合并`
 
 ## P0（🔴严重）
 1. [path:line] 问题说明
@@ -69,8 +71,8 @@ description: 用于当前项目的 Codex 代码审查与评分。适用于“代
 ## P2（🟢轻微）
 1. [path:line] 问题说明
 
-## Summary
-- P0: 0
-- P1: 2
-- P2: 3
+## 汇总
+- P0：0
+- P1：2
+- P2：3
 ```

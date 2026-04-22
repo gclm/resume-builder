@@ -1,7 +1,9 @@
 # author: jf
 import json
+import logging
 import uuid
 from collections.abc import Iterator
+from concurrent.futures import Future, ThreadPoolExecutor, TimeoutError as FuturesTimeoutError
 from string import hexdigits
 from typing import Any
 
@@ -14,6 +16,8 @@ from app.domain.policies.interview_prompt_policy import (
 from app.domain.services.rag_retrieval_service import RagRetrieverService
 
 _ALLOWED_PHASES = {"opening", "skills", "work", "projects", "scenario", "written", "summary"}
+_LOGGER = logging.getLogger("uvicorn.error")
+_RAG_QUERY_EXECUTOR = ThreadPoolExecutor(max_workers=4, thread_name_prefix="interview-rag")
 
 
 class InterviewGraph:
@@ -22,12 +26,20 @@ class InterviewGraph:
         llm_client: ChatClientPort,
         rag_retriever: RagRetrieverService,
         autogen_runtime: AgentRuntimePort,
+        rag_top_k: int = 5,
+        rag_similarity_threshold: float = 0.0,
+        rag_timeout_seconds: float = 3.0,
     ) -> None:
         self.llm_client = llm_client
         self.rag_retriever = rag_retriever
         self.autogen_runtime = autogen_runtime
+        self.rag_top_k = max(1, int(rag_top_k or 1))
+        self.rag_similarity_threshold = self._normalize_similarity_threshold(rag_similarity_threshold)
+        self.rag_timeout_seconds = max(0.2, float(rag_timeout_seconds or 3.0))
+        # 流式面试链路不依赖 langgraph 编译图，直接走 prepare/stream/finalize。
+        # 这里禁用初始化期图编译，避免在构建 InterviewGraph 时被阻塞。
         self._langgraph_available = False
-        self._compiled_graph = self._build_langgraph()
+        self._compiled_graph = None
 
     def _build_langgraph(self) -> Any:
         try:
@@ -87,16 +99,43 @@ class InterviewGraph:
             mode=safe_mode,
             user_input=str(state.get("userInput") or "").strip(),
         )
-        # Align with the Spring implementation: interview turns should be driven
-        # directly by recent history, memory summary, and resume snapshot so the
-        # first streamed token is not delayed by an extra RAG round trip.
+        if safe_command == "finish":
+            return {
+                **state,
+                "mode": safe_mode,
+                "command": safe_command,
+                "question": question,
+                "ragAnswer": "",
+                "ragSources": [],
+                "ragError": "",
+            }
+        # 面试轮次准备阶段职责：
+        # 1) 统一规范 mode/command/query，避免后续链路使用原始脏输入。
+        # 2) 在这里完成一次向量检索并把可用上下文放入状态，确保后续 LLM
+        #    评估/回答都在同一份检索结果之上，避免回复阶段重复检索造成漂移。
+        # 3) 检索失败不抛出到主链路，而是记录 ragError 作为可观察诊断信息。
+        rag_answer, rag_sources, rag_error = self._safe_query_rag(query=question, top_k=self.rag_top_k)
+        filtered_sources = self._filter_sources_by_similarity(rag_sources)
+        if not filtered_sources:
+            rag_answer = ""
+        self._log_interview_rag(
+            mode=safe_mode,
+            command=safe_command,
+            query=question,
+            rag_sources=rag_sources,
+            filtered_sources=filtered_sources,
+            rag_answer=rag_answer,
+            rag_error=rag_error,
+        )
+
         return {
             **state,
             "mode": safe_mode,
             "command": safe_command,
             "question": question,
-            "ragAnswer": "",
-            "ragSources": [],
+            "ragAnswer": rag_answer,
+            "ragSources": filtered_sources,
+            "ragError": rag_error or "",
         }
 
     def prepare_turn(self, payload: dict[str, Any]) -> dict[str, Any]:
@@ -285,11 +324,82 @@ class InterviewGraph:
         return "\n".join(sections)
 
     def _safe_query_rag(self, query: str, top_k: int) -> tuple[str, list[dict[str, Any]], str | None]:
+        # 这里使用共享线程池承接同步 RAG 查询，避免每次请求都创建临时线程池。
+        # 超时时保留首包快速返回，同时把并发线程数量限制在进程级固定上限内。
+        future: Future[tuple[str, list[dict[str, Any]]]] = _RAG_QUERY_EXECUTOR.submit(
+            self.rag_retriever.query,
+            query,
+            top_k,
+        )
         try:
-            answer, sources = self.rag_retriever.query(query=query, top_k=top_k)
+            answer, sources = future.result(timeout=self.rag_timeout_seconds)
             return str(answer or "").strip(), list(sources or []), None
+        except FuturesTimeoutError:
+            future.cancel()
+            # 超时时不要等待线程自然结束，否则会再次阻塞主链路首包返回。
+            future.cancel()
+            return "", [], f"RAG query timeout after {self.rag_timeout_seconds:.1f}s"
         except Exception as exc:
             return "", [], f"RAG query failed: {exc}"
+
+    def _normalize_similarity_threshold(self, raw_value: Any) -> float:
+        try:
+            threshold = float(raw_value)
+        except (TypeError, ValueError):
+            return 0.0
+        return max(0.0, min(1.0, threshold))
+
+    def _filter_sources_by_similarity(self, sources: list[dict[str, Any]]) -> list[dict[str, Any]]:
+        if not isinstance(sources, list):
+            return []
+
+        filtered: list[dict[str, Any]] = []
+        for item in sources:
+            if not isinstance(item, dict):
+                continue
+
+            metadata = item.get("metadata")
+            safe_metadata = metadata if isinstance(metadata, dict) else {}
+            similarity = safe_metadata.get("similarity")
+            try:
+                safe_similarity = float(similarity)
+            except (TypeError, ValueError):
+                safe_similarity = 0.0
+
+            if safe_similarity < self.rag_similarity_threshold:
+                continue
+
+            filtered.append(item)
+
+        return filtered
+
+    def _log_interview_rag(
+        self,
+        *,
+        mode: str,
+        command: str,
+        query: str,
+        rag_sources: list[dict[str, Any]],
+        filtered_sources: list[dict[str, Any]],
+        rag_answer: str,
+        rag_error: str | None,
+    ) -> None:
+        # 面试检索观测日志：用于本地联调时确认检索命中与阈值过滤效果。
+        payload = {
+            "mode": mode,
+            "command": command,
+            "query": query,
+            "topK": self.rag_top_k,
+            "similarityThreshold": self.rag_similarity_threshold,
+            "ragTimeoutSeconds": self.rag_timeout_seconds,
+            "ragError": str(rag_error or ""),
+            "rawSourceCount": len(rag_sources),
+            "filteredSourceCount": len(filtered_sources),
+            "rawSources": rag_sources,
+            "filteredSources": filtered_sources,
+            "ragAnswer": rag_answer,
+        }
+        _LOGGER.warning("[AI面试][RAG检索] %s", json.dumps(payload, ensure_ascii=False, default=str))
 
     def _safe_chat(self, state: dict[str, Any]) -> tuple[str, str | None]:
         try:

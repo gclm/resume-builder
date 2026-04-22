@@ -1,3 +1,5 @@
+# author: jf
+
 # Logs
 logs
 *.log
@@ -43,3 +45,9 @@ __screenshots__/
 
 # Vite
 *.timestamp-*-*.mjs
+
+# Code review artifacts
+code-review/
+
+# requirements artifacts
+docs/requirements/

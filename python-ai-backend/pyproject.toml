@@ -8,6 +8,8 @@ dependencies = [
   "fastapi>=0.115.0,<1.0.0",
   "uvicorn[standard]>=0.30.0,<1.0.0",
   "pydantic>=2.8.0,<3.0.0",
+  "pypdf>=5.0.0,<6.0.0",
+  "python-docx>=1.1.2,<2.0.0",
   "python-multipart>=0.0.9,<1.0.0",
   "PyMySQL>=1.1.1,<2.0.0"
 ]
@@ -17,8 +19,13 @@ ai = [
   "langchain>=0.3.0,<1.0.0",
   "langgraph>=0.2.0,<1.0.0",
   "llama-index>=0.12.0,<1.0.0",
+  "llama-index-embeddings-openai>=0.3.0,<1.0.0",
+  "llama-index-embeddings-ollama>=0.3.0,<1.0.0",
+  "openai>=1.0.0,<3.0.0",
+  "httpx>=0.27.0,<1.0.0",
   "pyautogen>=0.2.0,<1.0.0",
-  "pgvector>=0.3.0,<1.0.0"
+  "pgvector>=0.3.0,<1.0.0",
+  "psycopg[binary]>=3.2.0,<4.0.0"
 ]
 
 [tool.uvicorn]

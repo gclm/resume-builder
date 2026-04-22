@@ -16,19 +16,59 @@ Spring Boot 3 + Spring AI 后端服务，提供聊天、流式输出、语音转
 
 ## 快速开始
 
+### 前置依赖
+
+- JDK `21`
+- Maven `3.9+`
+- Docker Desktop / Docker Compose
+- 一个可用的 OpenAI / OpenAI-compatible API Key
+
+### 第 1 步：准备 `.env`
+
+将 `spring-ai-backend/.env.example` 复制为 `spring-ai-backend/.env`，并至少确认以下值：
+
+```bash
+OPENAI_API_KEY=your_api_key_here
+MYSQL_DATASOURCE_URL=jdbc:mysql://127.0.0.1:3306/resume-builder?useUnicode=true&characterEncoding=UTF-8&serverTimezone=Asia/Shanghai&useSSL=false&allowPublicKeyRetrieval=true
+MYSQL_DATASOURCE_USERNAME=root
+MYSQL_DATASOURCE_PASSWORD=root
+PGVECTOR_DATASOURCE_URL=jdbc:postgresql://127.0.0.1:5432/resume_builder_vector
+PGVECTOR_DATASOURCE_USERNAME=postgres
+PGVECTOR_DATASOURCE_PASSWORD=postgres
+SERVER_PORT=8999
+APP_CORS_ALLOWED_ORIGINS=http://localhost:5173
+```
+
+说明：
+
+- `spring-ai-backend/.env.example` 中部分 `PGVECTOR_*` 示例值和当前 `docker-compose.yml` 默认值不一致，复制后请以上面这一组为准。
+- 前端开发代理固定转发到 `http://localhost:8999`，所以 `SERVER_PORT` 建议保持 `8999`。
+
+### 第 2 步：启动数据库
+
 在 `spring-ai-backend/` 目录执行：
 
 ```bash
-# 1) 复制环境变量模板
-cp .env.example .env
-
-# 2) 手工执行会话建表脚本
-mysql -u root -p your_database < ../sql/interview_schema.sql
-
-# 3) 启动依赖数据库（MySQL + pgvector）
 docker compose up -d
+```
 
-# 4) 启动后端
+### 第 3 步：导入数据库
+
+在 `spring-ai-backend/` 目录执行：
+
+```bash
+# AI 面试会话表（必须导入）
+docker exec -i spring-ai-mysql mysql -uroot -proot resume-builder < ../sql/interview_schema.sql
+
+# RAG 向量表（使用知识库上传 / 检索时必须导入）
+docker exec -i spring-ai-pgvector psql -U postgres -d resume_builder_vector < ../sql/pgvector_rag_schema.sql
+```
+
+### 第 4 步：启动后端
+
+在 `spring-ai-backend/` 目录执行：
+
+```bash
 mvn spring-boot:run
 ```
 
@@ -42,16 +82,19 @@ mvn spring-boot:run
 
 ```bash
 OPENAI_API_KEY=your_api_key_here
-MYSQL_DATASOURCE_URL=jdbc:mysql://localhost:3306/resume-builder?useUnicode=true&characterEncoding=UTF-8&serverTimezone=Asia/Shanghai&useSSL=false&allowPublicKeyRetrieval=true
+MYSQL_DATASOURCE_URL=jdbc:mysql://127.0.0.1:3306/resume-builder?useUnicode=true&characterEncoding=UTF-8&serverTimezone=Asia/Shanghai&useSSL=false&allowPublicKeyRetrieval=true
 MYSQL_DATASOURCE_USERNAME=root
 MYSQL_DATASOURCE_PASSWORD=root
+PGVECTOR_DATASOURCE_URL=jdbc:postgresql://127.0.0.1:5432/resume_builder_vector
+PGVECTOR_DATASOURCE_USERNAME=postgres
+PGVECTOR_DATASOURCE_PASSWORD=postgres
 SERVER_PORT=8999
 APP_CORS_ALLOWED_ORIGINS=http://localhost:5173
 ```
 
 ### 2) pgvector 配置（用于 RAG）
 
-如果使用仓库内 `docker-compose.yml`，请把 `.env` 中 pgvector 相关配置改为：
+如果使用当前仓库的 `spring-ai-backend/docker-compose.yml`，请以这组配置为准：
 
 ```bash
 PGVECTOR_DATASOURCE_URL=jdbc:postgresql://127.0.0.1:5432/resume_builder_vector
@@ -80,15 +123,16 @@ spring:
 
 ### 5) 建表脚本
 
-AI 面试会话表与消息表初始化脚本放在项目根目录：
+数据库初始化脚本放在项目根目录：
 
-`sql/interview_schema.sql`
+- `sql/interview_schema.sql`
+- `sql/pgvector_rag_schema.sql`
 
 说明：
 
-- 该脚本需要开发者手工执行一次。
+- 两份脚本都需要开发者手工执行一次。
 - 应用启动时不会自动执行建表 SQL。
-- Python 后端也复用这份脚本，不再保留第二份会话建表文件。
+- Python 后端也复用这两份脚本。
 
 ## 与前端联调
 
