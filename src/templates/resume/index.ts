@@ -5,6 +5,7 @@ import { BLUE_SIDEBAR_CAREER_TEMPLATE } from './blue-sidebar-career/template'
 import { BLUE_SPLIT_PRO_TEMPLATE } from './blue-split-pro/template'
 import { DEFAULT_TEMPLATE } from './default/template'
 import { GREEN_ICON_LINEAR_TEMPLATE } from './green-icon-linear/template'
+import { RED_GRADIENT_TEMPLATE } from './red-gradient-template/template'
 import { WORKPLACE_GENERAL_TEMPLATE } from './workplace-general/template'
 import type { ResumeTemplateDefinition, ResumeTemplateKey } from './types'
 
@@ -12,6 +13,7 @@ export type { ResumeTemplateDefinition, ResumeTemplateKey, ResumeTemplateModel }
 
 const LEGACY_TEMPLATE_ALIAS: Record<string, ResumeTemplateKey> = {
   'classic-blue': 'blue-linear',
+  'red-gradient-model': 'red-gradient-template',
 }
 
 function buildTemplateRegistry(templates: ResumeTemplateDefinition[]): ResumeTemplateDefinition[] {
@@ -45,6 +47,7 @@ export const RESUME_TEMPLATES = buildTemplateRegistry([
   BLUE_SIDEBAR_CAREER_TEMPLATE,
   BLUE_SPLIT_PRO_TEMPLATE,
   BLUE_CARD_TEMPLATE,
+  RED_GRADIENT_TEMPLATE,
 ])
 
 const TEMPLATE_MAP = RESUME_TEMPLATES.reduce<Record<string, ResumeTemplateDefinition>>((acc, template) => {

@@ -7,13 +7,8 @@ from app.application.ports.vector_store_port import VectorStorePort
 class RagRetrieverService:
     def __init__(self, vector_store: VectorStorePort) -> None:
         self.vector_store = vector_store
+        # 避免在请求链路构建阶段做重量级 import 探测，防止阻塞“结束并评分”流。
         self.llamaindex_available = False
-        try:
-            from llama_index.core import Document  # noqa: F401
-
-            self.llamaindex_available = True
-        except Exception:
-            self.llamaindex_available = False
 
     def query(self, query: str, top_k: int) -> tuple[str, list[dict[str, Any]]]:
         sources = self.vector_store.similarity_search(query=query, top_k=top_k)

@@ -5,42 +5,67 @@ param(
 )
 
 $ErrorActionPreference = "Stop"
-$listeners = @(
-    Get-NetTCPConnection -LocalPort $Port -State Listen -ErrorAction SilentlyContinue |
-        Sort-Object OwningProcess -Unique
-)
 
-if ($listeners.Count -eq 0) {
+function Get-ListeningPids {
+    param(
+        [int]$TargetPort
+    )
+
+    $matched = @(
+        netstat -ano -p tcp |
+            Select-String -Pattern "^\s*TCP\s+\S+:$TargetPort\s+\S+\s+LISTENING\s+\d+\s*$"
+    )
+
+    if ($matched.Count -eq 0) {
+        return @()
+    }
+
+    return @(
+        $matched |
+            ForEach-Object {
+                $columns = ($_ -split "\s+") | Where-Object { $_ -ne "" }
+                [int]$columns[-1]
+            } |
+            Sort-Object -Unique
+    )
+}
+
+Write-Host "Inspecting port $Port listeners..." -ForegroundColor Cyan
+$listenerPids = @(Get-ListeningPids -TargetPort $Port)
+
+if ($listenerPids.Count -eq 0) {
     Write-Host "No listener found on port $Port."
     exit 0
 }
 
 $missingProcess = $false
 
-foreach ($listener in $listeners) {
-    $pid = [int]$listener.OwningProcess
+foreach ($targetPid in $listenerPids) {
     try {
-        $process = Get-Process -Id $pid -ErrorAction Stop
-        Write-Host ("Stopping PID {0} ({1})" -f $pid, $process.ProcessName) -ForegroundColor Yellow
-        Stop-Process -Id $pid -Force -ErrorAction Stop
+        $process = Get-Process -Id $targetPid -ErrorAction Stop
+        Write-Host ("Stopping PID {0} ({1})" -f $targetPid, $process.ProcessName) -ForegroundColor Yellow
+        Stop-Process -Id $targetPid -Force -ErrorAction Stop
     }
     catch {
         $missingProcess = $true
-        Write-Warning "PID $pid is not visible in the current process list. The port listener may be stale."
+        Write-Warning "PID $targetPid is not visible in the current process list. The port listener may be stale."
     }
 }
 
 Start-Sleep -Seconds 1
 
-$remaining = @(
-    Get-NetTCPConnection -LocalPort $Port -State Listen -ErrorAction SilentlyContinue |
-        Sort-Object OwningProcess -Unique
-)
+$remainingPids = @(Get-ListeningPids -TargetPort $Port)
 
-if ($remaining.Count -gt 0) {
+if ($remainingPids.Count -gt 0) {
     Write-Warning "Port $Port is still busy."
-    foreach ($listener in $remaining) {
-        Write-Warning ("Remaining listener PID={0} CreatedAt={1}" -f $listener.OwningProcess, $listener.CreationTime)
+    foreach ($remainingPid in $remainingPids) {
+        $remainingProcess = Get-Process -Id $remainingPid -ErrorAction SilentlyContinue
+        if ($null -ne $remainingProcess) {
+            Write-Warning ("Remaining listener PID={0} Process={1}" -f $remainingPid, $remainingProcess.ProcessName)
+        }
+        else {
+            Write-Warning ("Remaining listener PID={0}" -f $remainingPid)
+        }
     }
     if ($missingProcess) {
         Write-Warning "The fastest cleanup is a Windows reboot before restarting the backend."

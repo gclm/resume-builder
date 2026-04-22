@@ -72,13 +72,21 @@ def _extract_content(payload: dict) -> str:
 
 
 class LangChainClient:
-    def __init__(self, model_name: str, base_url: str, api_key: str, completions_path: str | None = None) -> None:
+    def __init__(
+        self,
+        model_name: str,
+        base_url: str,
+        api_key: str,
+        completions_path: str | None = None,
+        timeout_seconds: float = 25.0,
+    ) -> None:
         self.model_name = (model_name or "").strip() or "gpt-5.4"
         self.base_url = _build_chat_url(base_url, completions_path)
         self.api_key = (api_key or "").strip()
+        self.timeout_seconds = max(3.0, float(timeout_seconds or 25.0))
 
     def _build_payload(self, message: str, system_prompt: str | None = None) -> dict:
-        prompt = (system_prompt or "").strip() or "You are a helpful assistant."
+        prompt = (system_prompt or "").strip() or "你是一个有帮助的助手。"
         return {
             "model": self.model_name,
             "messages": [
@@ -101,7 +109,7 @@ class LangChainClient:
             method="POST",
         )
         try:
-            with urllib.request.urlopen(request, timeout=120) as response:
+            with urllib.request.urlopen(request, timeout=self.timeout_seconds) as response:
                 body = response.read().decode("utf-8", errors="replace")
                 parsed = json.loads(body)
                 return parsed if isinstance(parsed, dict) else {}
@@ -145,14 +153,16 @@ class LangChainClient:
         )
 
         try:
-            with urllib.request.urlopen(request, timeout=120) as response:
+            with urllib.request.urlopen(request, timeout=self.timeout_seconds) as response:
                 for raw in response:
                     line = raw.decode("utf-8", errors="replace").strip()
                     if not line.startswith("data:"):
                         continue
                     data = line[5:].strip()
-                    if not data or data == "[DONE]":
+                    if not data:
                         continue
+                    if data == "[DONE]":
+                        break
                     try:
                         event = json.loads(data)
                     except json.JSONDecodeError:
@@ -162,8 +172,12 @@ class LangChainClient:
                     if not isinstance(choices, list) or not choices:
                         continue
                     choice0 = choices[0] if isinstance(choices[0], dict) else {}
+                    finish_reason = str(choice0.get("finish_reason") or "").strip().lower()
                     delta = choice0.get("delta")
                     if not isinstance(delta, dict):
+                        # 某些兼容网关在结束帧不会再带 delta，但会给 finish_reason。
+                        if finish_reason:
+                            break
                         continue
                     token = delta.get("content")
                     if isinstance(token, list):
@@ -174,6 +188,8 @@ class LangChainClient:
                         )
                     if isinstance(token, str) and token:
                         yield token
+                    if finish_reason:
+                        break
         except urllib.error.HTTPError as exc:
             detail = exc.read().decode("utf-8", errors="replace")
             raise RuntimeError(f"OpenAI API HTTP {exc.code}: {detail[:300]}") from exc

@@ -27,10 +27,10 @@ import reactor.core.publisher.Sinks;
 public class AiGatewayService {
 
     private static final String RAG_SYSTEM_PROMPT = """
-            You are a helpful assistant.
-            Answer the user strictly based on the provided context.
-            If the context is insufficient, clearly say what is missing.
-            Keep the answer concise and accurate.
+            你是一个有帮助的助手。
+            请严格基于提供的上下文回答用户问题。
+            如果上下文不足，请明确说明缺少哪些信息。
+            请保持回答简洁、准确。
             """;
 
     private final ChatClient chatClient;
@@ -142,7 +142,7 @@ public class AiGatewayService {
         String answer = resumeMarkdownCleaner.safeContent(
                 chatClient.prompt()
                         .system(RAG_SYSTEM_PROMPT)
-                        .user("Question:\n" + queryText + "\n\nContext:\n" + context)
+                        .user("问题：\n" + queryText + "\n\n上下文：\n" + context)
                         .call()
                         .content()
         );
@@ -176,7 +176,7 @@ public class AiGatewayService {
 
     private String buildContext(List<Document> documents) {
         if (documents.isEmpty()) {
-            return "No context found.";
+            return "未找到可用上下文。";
         }
 
         List<String> chunks = new ArrayList<>();

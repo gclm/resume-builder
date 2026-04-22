@@ -314,8 +314,10 @@ function resetSession() {
   sessionFinished.value = false
 }
 
-function buildHistory(excludeLastUser = false): InterviewHistoryItem[] {
-  const source = excludeLastUser ? messages.value.slice(0, -1) : messages.value
+function buildHistory(excludeLastMessageId?: string): InterviewHistoryItem[] {
+  const source = excludeLastMessageId
+    ? messages.value.filter((item) => item.id !== excludeLastMessageId)
+    : messages.value
   return source.map((item) => ({
     role: item.role,
     content: item.content,
@@ -435,7 +437,7 @@ async function runInterview(command: 'start' | 'continue' | 'finish', userInput?
         command,
         sessionId: currentSessionId.value || undefined,
         userInput,
-        history: buildHistory(command === 'continue'),
+        history: buildHistory(draftMessageId),
         resumeSnapshot: resumeSnapshot.value,
         durationMinutes: durationMinutes.value,
         elapsedSeconds: elapsedSeconds.value,

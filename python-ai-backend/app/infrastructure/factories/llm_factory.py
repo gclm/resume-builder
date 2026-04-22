@@ -12,6 +12,7 @@ def create_chat_client(settings: Settings | None = None) -> OpenAIChatAdapter:
         base_url=resolved.openai_base_url,
         api_key=resolved.openai_api_key,
         completions_path=resolved.openai_chat_completions_path,
+        timeout_seconds=resolved.openai_chat_timeout_seconds,
     )
 
 

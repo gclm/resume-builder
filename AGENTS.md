@@ -26,14 +26,14 @@
 
 1. 业务 SQL（Mapper 自定义 SQL）必须写在 `mapper.xml` 文件中，不允许直接写在 Mapper 接口注解里（如 `@Select`、`@Update`、`@Insert`、`@Delete`）。
 2. 建表、索引、初始化等一次性 SQL（非项目运行期业务逻辑）必须写入固定 SQL 目录下的独立 `.sql` 文件。
-3. 固定 SQL 目录为：`spring-ai-backend/sql/`。
+3. 固定 SQL 目录为：`sql/`。
 4. 禁止在应用启动流程中自动执行上述一次性 SQL，由开发者手工执行。
 
 ## 会话存储数据库约束（强制）
 
 1. AI 面试会话存储数据库固定为 MySQL。
 2. PostgreSQL 仅用于向量存储（pgvector）相关能力，不用于会话表存储。
-3. 会话建表脚本仅保留一份：`spring-ai-backend/sql/interview_schema.sql`。
+3. 会话建表脚本仅保留一份：`sql/interview_schema.sql`。
 
 ## 文件作者标识约束（强制）
 
