@@ -1,4 +1,5 @@
-﻿export type MetaIconKey =
+// author: jf
+export type MetaIconKey =
   | 'phone'
   | 'mail'
   | 'user'

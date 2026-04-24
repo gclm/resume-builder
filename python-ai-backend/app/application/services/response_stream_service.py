@@ -63,6 +63,14 @@ def to_interview_chunk_event(assistant_reply: str) -> str:
     return to_ndjson_event("chunk", assistant_reply)
 
 
+def to_interview_accepted_event(message: str) -> str:
+    return to_ndjson_event("accepted", message)
+
+
+def to_interview_processing_event(message: str) -> str:
+    return to_ndjson_event("processing", message)
+
+
 def to_interview_done_event(done_payload: dict[str, Any]) -> str:
     return to_ndjson_event("done", json.dumps(done_payload, ensure_ascii=False))
 

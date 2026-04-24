@@ -1,9 +1,11 @@
+// author: jf
 import {
   type RealtimeClientSecretRequest,
   type RealtimeClientSecretResponse,
   postRealtimeCallSdp,
   postRealtimeClientSecret,
 } from '@/api/realtimeSpeechApi'
+import type { SpeechRuntimeState } from '@/services/browserSpeechService'
 
 const TEXT = {
   getSecretFailed: '\u83b7\u53d6\u5b9e\u65f6\u8bed\u97f3\u4f1a\u8bdd\u5931\u8d25',
@@ -21,7 +23,7 @@ const TEXT = {
 export interface RealtimeTranscriptionCallbacks {
   onPartialText?: (text: string) => void
   onFinalText?: (segment: string, mergedText: string) => void
-  onStateChange?: (state: 'connecting' | 'connected' | 'closed') => void
+  onStateChange?: (state: SpeechRuntimeState) => void
   onError?: (message: string) => void
 }
 

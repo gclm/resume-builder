@@ -300,4 +300,33 @@ const primaryMenus = [
   width: 28px;
   height: 28px;
 }
+
+@media (max-width: 960px) {
+  .sidebar {
+    width: 78px;
+    min-width: 78px;
+    padding: 14px 8px;
+  }
+
+  .brand {
+    justify-content: center;
+  }
+
+  .brand-text,
+  .menu-caption,
+  .menu-label,
+  .collapse-btn {
+    display: none;
+  }
+
+  .primary-menu-btn {
+    justify-content: center;
+    padding: 10px 6px;
+  }
+
+  .menu-icon {
+    width: 28px;
+    height: 28px;
+  }
+}
 </style>

@@ -3,8 +3,13 @@ import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
 import AiConfigDialog from '@/components/ai/AiConfigDialog.vue'
 import InterviewSimulationPanel from '@/components/ai/interview/InterviewSimulationPanel.vue'
 import ResumePreviewOverlay from '@/components/ai/interview/ResumePreviewOverlay.vue'
-import { BrowserSpeechTranscriptionSession, type SpeechSession } from '@/services/browserSpeechService'
+import {
+  BrowserSpeechTranscriptionSession,
+  type SpeechRuntimeState,
+  type SpeechSession,
+} from '@/services/browserSpeechService'
 import { RealtimeTranscriptionSession } from '@/services/realtimeSpeechService'
+import { UploadSpeechTranscriptionSession } from '@/services/uploadSpeechService'
 import { useAiConfigStore } from '@/stores/aiConfig'
 import { useResumeStore } from '@/stores/resume'
 import {
@@ -12,8 +17,10 @@ import {
   listInterviewSessions,
   requestInterviewTurn,
   type FinalEvaluation,
+  type InterviewCommand,
   type InterviewHistoryItem,
   type InterviewMode,
+  type InterviewRequestState,
   type InterviewSessionSummary,
   type InterviewTurnScore,
   type ResumeSnapshot,
@@ -26,7 +33,6 @@ const TEXT = {
   statusFinished: '\u5df2\u7ed3\u675f',
   statusRunning: '\u8fdb\u884c\u4e2d',
   statusPaused: '\u5df2\u6682\u505c',
-  thinking: '\u6b63\u5728\u601d\u8003\u4e2d...',
   unknownError: '\u672a\u77e5\u9519\u8bef',
   modeCandidate: '\u5019\u9009\u4eba\u6a21\u5f0f\uff08AI \u9762\u8bd5\u5b98\uff09',
   modeInterviewer: '\u9762\u8bd5\u5b98\u6a21\u5f0f\uff08AI \u5019\u9009\u4eba\uff09',
@@ -36,18 +42,31 @@ const TEXT = {
   pass: '\u901a\u8fc7',
   fail: '\u672a\u901a\u8fc7',
   projectInterview: '\u9879\u76ee\u9762\u8bd5',
+  switchedToUploadSpeech: '实时语音不可用，已切换为后端音频转写',
   switchedToBrowserSpeech: '\u5b9e\u65f6\u8bed\u97f3\u4e0d\u53ef\u7528\uff0c\u5df2\u5207\u6362\u4e3a\u6d4f\u89c8\u5668\u514d\u8d39\u8bed\u97f3\u8bc6\u522b',
-  speechUnavailable: '\u5b9e\u65f6\u8bed\u97f3\u4e0e\u6d4f\u89c8\u5668\u514d\u8d39\u8bed\u97f3\u5747\u4e0d\u53ef\u7528',
+  speechUnavailable: '实时语音、后端音频转写与浏览器免费语音均不可用',
   historyPlaceholder: '\u5386\u53f2\u4f1a\u8bdd',
   historyRefresh: '\u5237\u65b0\u5386\u53f2',
   historyLoading: '\u52a0\u8f7d\u4e2d...',
   sessionAlreadyFinished: '\u5f53\u524d\u4f1a\u8bdd\u5df2\u7ed3\u675f\uff0c\u4e0d\u53ef\u7ee7\u7eed\u6216\u53d1\u9001\u6d88\u606f\u3002',
+  composerDefaultHint: 'Enter \u53d1\u9001\uff0cCtrl+Enter \u6362\u884c\uff0cCtrl+I \u8bed\u97f3\u5f00\u5173',
+  composerListeningHint: '\u8bed\u97f3\u8f93\u5165\u4e2d\uff0c\u70b9\u51fb\u9ea6\u514b\u98ce\u7ed3\u675f',
+  composerRecordingHint: '录音中，点击麦克风结束后将自动转写',
+  composerConnectingHint: '语音连接中，请稍候',
+  composerTranscribingHint: '语音转写中，请稍候',
+  composerFailedHint: '\u672c\u8f6e\u53d1\u9001\u672a\u5b8c\u6210\uff0c\u8bf7\u6839\u636e\u63d0\u793a\u8c03\u6574\u540e\u91cd\u8bd5',
+  composerFinishedHint: '\u5f53\u524d\u4f1a\u8bdd\u5df2\u7ed3\u675f\uff0c\u5982\u9700\u7ee7\u7eed\u8bf7\u5148\u91cd\u7f6e',
+  speechRealtimeLabel: '实时语音',
+  speechUploadLabel: '后端转写',
+  speechBrowserLabel: '浏览器识别',
+  speechPreferredLabel: '后端语音优先',
 } as const
 
 const resumeStore = useResumeStore()
 const aiConfigStore = useAiConfigStore()
 
-type SpeechEngine = 'realtime' | 'browser'
+type SpeechEngine = 'realtime' | 'upload' | 'browser'
+type SpeechUiState = Exclude<SpeechRuntimeState, 'closed'> | 'idle'
 
 const mode = ref<InterviewMode>('candidate')
 const durationMinutes = ref(60)
@@ -63,12 +82,15 @@ const inputText = ref('')
 const finalEvaluation = ref<FinalEvaluation | null>(null)
 const messages = ref<ChatMessage[]>([])
 const memorySummary = ref('')
+const requestState = ref<InterviewRequestState>('idle')
+const requestStatusText = ref('')
 const streamingAssistantMessageId = ref<string | null>(null)
 const currentSessionId = ref('')
 const sessionHistory = ref<InterviewSessionSummary[]>([])
 const selectedSessionId = ref('')
 const loadingSessionHistory = ref(false)
 const sessionFinished = ref(false)
+const speechUiState = ref<SpeechUiState>('idle')
 
 const totalSeconds = computed(() => Math.max(durationMinutes.value, 1) * 60)
 const remainingSeconds = computed(() => Math.max(totalSeconds.value - elapsedSeconds.value, 0))
@@ -90,9 +112,47 @@ const canSend = computed(() => sessionStarted.value && !sessionFinished.value &&
 const canStart = computed(() => !sessionStarted.value && !isLoading.value)
 const canTogglePause = computed(() => sessionStarted.value && !sessionFinished.value && remainingSeconds.value > 0 && !isLoading.value)
 const canFinish = computed(() => sessionStarted.value && !isLoading.value && !sessionFinished.value && messages.value.length > 0)
+const canToggleVoice = computed(
+  () => sessionStarted.value && !sessionFinished.value && !isLoading.value && speechUiState.value !== 'transcribing'
+)
 const configBadgeText = computed(() => '\u8bed\u97f3\u914d\u7f6e')
 const configTooltipText = computed(() => '\u8bed\u97f3\u914d\u7f6e')
 const historyRefreshText = computed(() => (loadingSessionHistory.value ? TEXT.historyLoading : TEXT.historyRefresh))
+const speechStatusText = computed(() => {
+  const engineLabel = resolveSpeechEngineLabel(activeSpeechEngine.value)
+  if (!sessionStarted.value) {
+    return `语音 · ${aiConfigStore.shouldRequestBackendSpeech ? TEXT.speechPreferredLabel : TEXT.speechBrowserLabel}`
+  }
+  if (speechUiState.value === 'connecting') {
+    return `语音 · ${engineLabel}连接中`
+  }
+  if (speechUiState.value === 'connected') {
+    if (activeSpeechEngine.value === 'upload') {
+      return `语音 · ${engineLabel}录音中`
+    }
+    if (activeSpeechEngine.value === 'browser') {
+      return '语音 · 浏览器输入中'
+    }
+    return `语音 · ${engineLabel}识别中`
+  }
+  if (speechUiState.value === 'transcribing') {
+    return `语音 · ${engineLabel}转写中`
+  }
+  return `语音 · ${engineLabel}`
+})
+const composerHintText = computed(() => {
+  if (speechUiState.value === 'connecting') return TEXT.composerConnectingHint
+  if (speechUiState.value === 'transcribing') return `${resolveSpeechEngineLabel(activeSpeechEngine.value)}处理中，请稍候`
+  if (isListening.value) {
+    return activeSpeechEngine.value === 'upload' ? TEXT.composerRecordingHint : TEXT.composerListeningHint
+  }
+  if (['submitting', 'accepted', 'processing', 'responding'].includes(requestState.value)) {
+    return requestStatusText.value || TEXT.composerDefaultHint
+  }
+  if (requestState.value === 'failed') return TEXT.composerFailedHint
+  if (sessionFinished.value) return TEXT.composerFinishedHint
+  return TEXT.composerDefaultHint
+})
 
 const resumeSnapshot = computed<ResumeSnapshot>(() => ({
   basicInfo: resumeStore.basicInfo,
@@ -105,13 +165,73 @@ const resumeSnapshot = computed<ResumeSnapshot>(() => ({
 
 let ticker: ReturnType<typeof setInterval> | null = null
 let speechSession: SpeechSession | null = null
-let speechEngine: SpeechEngine | null = null
+const activeSpeechEngine = ref<SpeechEngine | null>(null)
 let switchingSpeechEngine = false
 let speechInputPrefix = ''
 let speechTranscript = ''
 
 function newMessageId(): string {
   return `${Date.now()}_${Math.random().toString(36).slice(2, 8)}`
+}
+
+function resolveAssistantLabel(currentMode: InterviewMode): string {
+  return currentMode === 'candidate' ? 'AI面试官' : 'AI候选人'
+}
+
+function resolveSpeechEngineLabel(engine: SpeechEngine | null): string {
+  if (engine === 'realtime') return TEXT.speechRealtimeLabel
+  if (engine === 'upload') return TEXT.speechUploadLabel
+  if (engine === 'browser') return TEXT.speechBrowserLabel
+  return aiConfigStore.shouldRequestBackendSpeech ? TEXT.speechPreferredLabel : TEXT.speechBrowserLabel
+}
+
+function normalizeStatusMessage(message: string, fallback: string): string {
+  const cleaned = String(message || '').trim()
+  return cleaned || fallback
+}
+
+function buildRequestStatusText(command: InterviewCommand, state: InterviewRequestState): string {
+  const assistantLabel = resolveAssistantLabel(mode.value)
+
+  if (command === 'start') {
+    if (state === 'submitting') return '正在启动面试...'
+    if (state === 'accepted') return '面试已启动，正在同步当前简历上下文'
+    if (state === 'processing') {
+      return mode.value === 'candidate' ? 'AI面试官正在生成第一轮问题...' : 'AI候选人正在生成开场回答...'
+    }
+    if (state === 'responding') return `${assistantLabel}正在回复...`
+    if (state === 'failed') return '面试启动失败，请重试'
+    return ''
+  }
+
+  if (command === 'finish') {
+    if (state === 'submitting') return '正在结束面试...'
+    if (state === 'accepted') return '已收到结束指令'
+    if (state === 'processing') return '正在生成评分结果与总结...'
+    if (state === 'responding') return `${assistantLabel}正在输出评分结果...`
+    if (state === 'failed') return '结束并评分失败，请重试'
+    return ''
+  }
+
+  if (state === 'submitting') return '消息已发送'
+  if (state === 'accepted') return '已收到你的回答'
+  if (state === 'processing') {
+    return mode.value === 'candidate' ? 'AI面试官正在组织下一轮提问...' : 'AI候选人正在组织回答...'
+  }
+  if (state === 'responding') return `${assistantLabel}正在回复...`
+  if (state === 'failed') return '本轮回复失败，请调整后重试'
+  return ''
+}
+
+function setRequestState(nextState: InterviewRequestState, command: InterviewCommand, message?: string) {
+  requestState.value = nextState
+
+  if (nextState === 'idle' || nextState === 'completed') {
+    requestStatusText.value = ''
+    return
+  }
+
+  requestStatusText.value = normalizeStatusMessage(message || '', buildRequestStatusText(command, nextState))
 }
 
 function appendMessage(role: 'assistant' | 'user', content: string, score: InterviewTurnScore | null = null) {
@@ -123,12 +243,12 @@ function appendMessage(role: 'assistant' | 'user', content: string, score: Inter
   })
 }
 
-function createAssistantDraftMessage(): string {
+function createAssistantDraftMessage(content: string): string {
   const id = newMessageId()
   messages.value.push({
     id,
     role: 'assistant',
-    content: TEXT.thinking,
+    content: content.trim(),
     score: null,
   })
   return id
@@ -178,7 +298,8 @@ function buildSpeechCallbacks(engine: SpeechEngine) {
       errorMsg.value = message
       stopSpeechSafely(false)
     },
-    onStateChange(state: 'connecting' | 'connected' | 'closed') {
+    onStateChange(state: SpeechRuntimeState) {
+      speechUiState.value = state === 'closed' ? 'idle' : state
       isListening.value = state === 'connected' || state === 'connecting'
     },
   }
@@ -192,6 +313,13 @@ async function createSpeechSession(engine: SpeechEngine): Promise<SpeechSession>
     })
   }
 
+  if (engine === 'upload') {
+    return new UploadSpeechTranscriptionSession({
+      language: 'zh',
+      callbacks: buildSpeechCallbacks('upload'),
+    })
+  }
+
   return new BrowserSpeechTranscriptionSession({
     language: 'zh-CN',
     callbacks: buildSpeechCallbacks('browser'),
@@ -201,41 +329,54 @@ async function createSpeechSession(engine: SpeechEngine): Promise<SpeechSession>
 async function activateSpeechEngine(engine: SpeechEngine) {
   const session = await createSpeechSession(engine)
   speechSession = session
-  speechEngine = engine
-  await session.start()
+  activeSpeechEngine.value = engine
+  speechUiState.value = 'connecting'
+  try {
+    await session.start()
+  } catch (error) {
+    speechSession = null
+    activeSpeechEngine.value = null
+    speechUiState.value = 'idle'
+    throw error
+  }
 }
 
 async function stopSpeech(clearSpeechText: boolean) {
   const session = speechSession
   speechSession = null
-  speechEngine = null
 
   if (session) {
     await session.stop({ silent: clearSpeechText })
   }
 
   isListening.value = false
+  speechUiState.value = 'idle'
   if (clearSpeechText) {
     speechTranscript = ''
     inputText.value = speechInputPrefix
   }
   speechInputPrefix = ''
+  activeSpeechEngine.value = null
 }
 
 function stopSpeechSafely(clearSpeechText: boolean) {
   void stopSpeech(clearSpeechText).catch(() => {
     isListening.value = false
+    speechUiState.value = 'idle'
+    activeSpeechEngine.value = null
   })
 }
 
-async function trySwitchToBrowserSpeech(reason: string): Promise<boolean> {
+async function trySwitchToBrowserSpeech(reason: string, markBackendUnavailable = false): Promise<boolean> {
   if (switchingSpeechEngine) {
     return false
   }
 
   switchingSpeechEngine = true
   try {
-    aiConfigStore.markBackendSpeechUnavailable()
+    if (markBackendUnavailable) {
+      aiConfigStore.markBackendSpeechUnavailable()
+    }
     await stopSpeech(false)
     await activateSpeechEngine('browser')
     errorMsg.value = `${TEXT.switchedToBrowserSpeech}\n${reason}`
@@ -249,9 +390,43 @@ async function trySwitchToBrowserSpeech(reason: string): Promise<boolean> {
   }
 }
 
+async function trySwitchFromRealtimeToUpload(reason: string): Promise<boolean> {
+  if (switchingSpeechEngine) {
+    return false
+  }
+
+  switchingSpeechEngine = true
+  try {
+    await stopSpeech(false)
+    speechInputPrefix = inputText.value.trim()
+    speechTranscript = ''
+    inputText.value = speechInputPrefix
+
+    try {
+      await activateSpeechEngine('upload')
+      errorMsg.value = `${TEXT.switchedToUploadSpeech}\n${reason}`
+      return true
+    } catch (uploadError) {
+      const uploadMessage = formatErrorMessage(uploadError)
+      aiConfigStore.markBackendSpeechUnavailable()
+      try {
+        await activateSpeechEngine('browser')
+        errorMsg.value = `${TEXT.switchedToBrowserSpeech}\n${reason}\n${uploadMessage}`
+        return true
+      } catch (browserError) {
+        const browserMessage = formatErrorMessage(browserError)
+        errorMsg.value = `${TEXT.speechUnavailable}\n${reason}\n${uploadMessage}\n${browserMessage}`
+        return false
+      }
+    }
+  } finally {
+    switchingSpeechEngine = false
+  }
+}
+
 async function handleRealtimeSpeechError(message: string) {
-  if (speechEngine === 'realtime') {
-    const switched = await trySwitchToBrowserSpeech(message)
+  if (activeSpeechEngine.value === 'realtime') {
+    const switched = await trySwitchFromRealtimeToUpload(message)
     if (switched) {
       return
     }
@@ -267,6 +442,7 @@ async function startSpeech() {
   errorMsg.value = ''
   speechInputPrefix = inputText.value.trim()
   speechTranscript = ''
+  speechUiState.value = 'idle'
   mergeSpeechToInput()
 
   if (!aiConfigStore.shouldRequestBackendSpeech) {
@@ -283,17 +459,27 @@ async function startSpeech() {
   try {
     await activateSpeechEngine('realtime')
   } catch (error) {
-    const message = formatErrorMessage(error)
-    const switched = await trySwitchToBrowserSpeech(message)
-    if (switched) {
-      return
-    }
+    const realtimeMessage = formatErrorMessage(error)
 
-    isListening.value = false
-    speechTranscript = ''
-    inputText.value = speechInputPrefix
-    speechInputPrefix = ''
-    errorMsg.value = message
+    try {
+      await activateSpeechEngine('upload')
+      errorMsg.value = `${TEXT.switchedToUploadSpeech}\n${realtimeMessage}`
+      return
+    } catch (uploadError) {
+      const uploadMessage = formatErrorMessage(uploadError)
+      const switched = await trySwitchToBrowserSpeech(`${realtimeMessage}\n${uploadMessage}`, true)
+      if (switched) {
+        return
+      }
+
+      isListening.value = false
+      speechUiState.value = 'idle'
+      speechTranscript = ''
+      inputText.value = speechInputPrefix
+      speechInputPrefix = ''
+      activeSpeechEngine.value = null
+      errorMsg.value = `${TEXT.speechUnavailable}\n${realtimeMessage}\n${uploadMessage}`
+    }
   }
 }
 
@@ -303,6 +489,8 @@ function resetSession() {
   finalEvaluation.value = null
   memorySummary.value = ''
   errorMsg.value = ''
+  requestState.value = 'idle'
+  requestStatusText.value = ''
   elapsedSeconds.value = 0
   sessionStarted.value = false
   timerRunning.value = false
@@ -312,6 +500,8 @@ function resetSession() {
   selectedSessionId.value = ''
   isListening.value = false
   sessionFinished.value = false
+  speechUiState.value = 'idle'
+  activeSpeechEngine.value = null
 }
 
 function buildHistory(excludeLastMessageId?: string): InterviewHistoryItem[] {
@@ -346,6 +536,8 @@ function applySessionDetail(detail: Awaited<ReturnType<typeof getInterviewSessio
   }))
   memorySummary.value = detail.memorySummary || ''
   finalEvaluation.value = detail.finalEvaluation
+  requestState.value = 'idle'
+  requestStatusText.value = ''
   currentSessionId.value = detail.sessionId
   selectedSessionId.value = detail.sessionId
   sessionStarted.value = detail.messages.length > 0
@@ -418,7 +610,7 @@ async function handleSessionSelectionChange() {
 function handleRefreshSessionHistory() {
   void refreshSessionHistory(selectedSessionId.value || currentSessionId.value)
 }
-async function runInterview(command: 'start' | 'continue' | 'finish', userInput?: string) {
+async function runInterview(command: InterviewCommand, userInput?: string) {
   if (isLoading.value) return
   if (command === 'continue' && sessionFinished.value) {
     errorMsg.value = TEXT.sessionAlreadyFinished
@@ -427,8 +619,10 @@ async function runInterview(command: 'start' | 'continue' | 'finish', userInput?
 
   isLoading.value = true
   errorMsg.value = ''
-  const draftMessageId = createAssistantDraftMessage()
+  setRequestState('submitting', command)
+  const draftMessageId = createAssistantDraftMessage(requestStatusText.value || buildRequestStatusText(command, 'submitting'))
   streamingAssistantMessageId.value = draftMessageId
+  let hasStreamedAssistantReply = false
 
   try {
     const response = await requestInterviewTurn(
@@ -445,13 +639,24 @@ async function runInterview(command: 'start' | 'continue' | 'finish', userInput?
       },
       undefined,
       {
+        onAccepted(message) {
+          setRequestState('accepted', command, message)
+          updateAssistantMessageById(draftMessageId, requestStatusText.value, null)
+        },
+        onProcessing(message) {
+          setRequestState('processing', command, message)
+          updateAssistantMessageById(draftMessageId, requestStatusText.value, null)
+        },
         onAssistantReplyChunk(text) {
+          hasStreamedAssistantReply = true
+          setRequestState('responding', command)
           updateAssistantMessageById(draftMessageId, text)
         },
       }
     )
 
     updateAssistantMessageById(draftMessageId, response.assistantReply, response.turnScore)
+    setRequestState('completed', command)
     if (response.sessionId) {
       currentSessionId.value = response.sessionId
       selectedSessionId.value = response.sessionId
@@ -464,10 +669,10 @@ async function runInterview(command: 'start' | 'continue' | 'finish', userInput?
     }
     void refreshSessionHistory(currentSessionId.value)
   } catch (error: unknown) {
-    const draft = messages.value.find((item) => item.id === draftMessageId)
-    if (draft && (!draft.content || draft.content.trim() === '' || draft.content === TEXT.thinking)) {
+    if (!hasStreamedAssistantReply) {
       removeMessageById(draftMessageId)
     }
+    setRequestState('failed', command)
     errorMsg.value = formatErrorMessage(error)
   } finally {
     if (streamingAssistantMessageId.value === draftMessageId) {
@@ -542,7 +747,7 @@ async function handleSend() {
 }
 
 async function handleToggleVoice() {
-  if (!sessionStarted.value || sessionFinished.value || isLoading.value) return
+  if (!canToggleVoice.value) return
 
   if (isListening.value) {
     await stopSpeech(false)
@@ -656,6 +861,9 @@ onUnmounted(() => {
         :input-text="inputText"
         :can-send="canSend"
         :is-listening="isListening"
+        :request-state="requestState"
+        :request-status-text="requestStatusText"
+        :composer-hint-text="composerHintText"
         :streaming-assistant-message-id="streamingAssistantMessageId"
         :session-started="sessionStarted"
         :timer-text="timerText"
@@ -663,11 +871,14 @@ onUnmounted(() => {
         :current-round="currentRound"
         :user-turns="userTurns"
         :assistant-turns="assistantTurns"
+        :can-toggle-voice="canToggleVoice"
         :can-start="canStart"
         :can-toggle-pause="canTogglePause"
         :can-finish="canFinish"
         :session-finished="sessionFinished"
         :timer-running="timerRunning"
+        :speech-state="speechUiState"
+        :speech-status-text="speechStatusText"
         @update:input-text="inputText = $event"
         @start="handleStart"
         @toggle-pause="handleTogglePause"

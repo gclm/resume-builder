@@ -22,6 +22,7 @@ export type {
   InterviewHistoryItem,
   InterviewMode,
   InterviewPhase,
+  InterviewRequestState,
   InterviewSessionDetail,
   InterviewSessionMessage,
   InterviewSessionSummary,
@@ -146,6 +147,16 @@ async function requestInterviewTurnPayload(
   const handleLine = (line: string) => {
     const parsed = parseNdjsonLine(line)
     if (!parsed) return
+
+    if (parsed.event === 'accepted') {
+      callbacks?.onAccepted?.(parsed.data)
+      return
+    }
+
+    if (parsed.event === 'processing') {
+      callbacks?.onProcessing?.(parsed.data)
+      return
+    }
 
     if (parsed.event === 'chunk') {
       latestAssistantReply = parsed.data

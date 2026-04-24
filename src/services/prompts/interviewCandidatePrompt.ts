@@ -1,4 +1,5 @@
-﻿export function candidateModeSystemPrompt(): string {
+// author: jf
+export function candidateModeSystemPrompt(): string {
   return [
     '你是一名专业、严格、但表达友善的资深技术面试官。',
     '当前模式是“你是面试者”：用户扮演候选人，你负责提问、追问和评分。',

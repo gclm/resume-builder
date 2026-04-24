@@ -1,7 +1,7 @@
-﻿<script setup lang="ts">
-import { computed, nextTick, ref, watch } from 'vue'
+<script setup lang="ts">
+import { computed, nextTick, onMounted, ref, watch } from 'vue'
 import MarkdownIt from 'markdown-it'
-import type { InterviewMode } from '@/services/interviewService'
+import type { InterviewMode, InterviewRequestState } from '@/services/interviewService'
 import type { ChatMessage } from '@/components/ai/interview/types'
 
 // author: jf
@@ -13,6 +13,9 @@ const props = defineProps<{
   inputText: string
   canSend: boolean
   isListening: boolean
+  requestState: InterviewRequestState
+  requestStatusText: string
+  composerHintText: string
   streamingAssistantMessageId: string | null
   sessionStarted: boolean
   timerText: string
@@ -20,11 +23,14 @@ const props = defineProps<{
   currentRound: number
   userTurns: number
   assistantTurns: number
+  canToggleVoice: boolean
   canStart: boolean
   canTogglePause: boolean
   canFinish: boolean
   sessionFinished: boolean
   timerRunning: boolean
+  speechState: 'idle' | 'connecting' | 'connected' | 'transcribing'
+  speechStatusText: string
 }>()
 
 const emit = defineEmits<{
@@ -39,6 +45,7 @@ const emit = defineEmits<{
 }>()
 
 const chatListRef = ref<HTMLElement | null>(null)
+const answerInputRef = ref<HTMLTextAreaElement | null>(null)
 const markdown = new MarkdownIt({
   html: false,
   linkify: true,
@@ -48,7 +55,21 @@ const markdown = new MarkdownIt({
 
 const assistantName = computed(() => (props.mode === 'candidate' ? 'AI面试官' : 'AI候选人'))
 const pauseButtonLabel = computed(() => (props.timerRunning ? '暂停' : '继续'))
-const isStreamingReply = computed(() => Boolean(props.streamingAssistantMessageId))
+const isComposerBusy = computed(() =>
+  props.isLoading || ['submitting', 'accepted', 'processing', 'responding'].includes(props.requestState)
+)
+const isSpeechActive = computed(() => ['connecting', 'connected', 'transcribing'].includes(props.speechState))
+const composerPlaceholder = computed(() => {
+  if (!props.sessionStarted) {
+    return '点击“开始”后，系统会生成第一轮问题或候选人开场回答'
+  }
+  if (props.sessionFinished) {
+    return '当前会话已结束'
+  }
+  return props.mode === 'candidate'
+    ? '输入你的回答，AI 面试官会继续追问'
+    : '输入你希望候选人回答的内容或追问方向'
+})
 
 function normalizeAssistantContent(content: string): string {
   const text = content?.trim() || ''
@@ -95,18 +116,47 @@ function handleComposerSubmit() {
   if (props.canSend) emit('send')
 }
 
+function syncTextareaHeight() {
+  const textarea = answerInputRef.value
+  if (!textarea) return
+
+  textarea.style.height = '0px'
+  textarea.style.height = `${Math.min(Math.max(textarea.scrollHeight, 116), 220)}px`
+}
+
 function scrollToBottom() {
   if (!chatListRef.value) return
   chatListRef.value.scrollTop = chatListRef.value.scrollHeight
 }
 
+function isPendingAssistantMessage(item: ChatMessage): boolean {
+  return (
+    item.role === 'assistant' &&
+    props.streamingAssistantMessageId === item.id &&
+    ['submitting', 'accepted', 'processing'].includes(props.requestState)
+  )
+}
+
+function isStreamingAssistantMessage(item: ChatMessage): boolean {
+  return item.role === 'assistant' && props.streamingAssistantMessageId === item.id && props.requestState === 'responding'
+}
+
 watch(
-  () => [props.messages.length, props.isLoading],
+  () => ({
+    inputText: props.inputText,
+    requestState: props.requestState,
+    messages: props.messages.map((item) => `${item.id}:${item.content}`).join('\u0001'),
+  }),
   async () => {
     await nextTick()
+    syncTextareaHeight()
     scrollToBottom()
   }
 )
+
+onMounted(() => {
+  syncTextareaHeight()
+})
 </script>
 
 <template>
@@ -173,52 +223,85 @@ watch(
           v-for="item in messages"
           :key="item.id"
           class="chat-item"
-          :class="item.role === 'assistant' ? 'assistant' : 'user'"
+          :class="[
+            item.role === 'assistant' ? 'assistant' : 'user',
+            {
+              pending: isPendingAssistantMessage(item),
+              streaming: isStreamingAssistantMessage(item),
+            },
+          ]"
         >
           <p class="chat-role">{{ item.role === 'assistant' ? assistantName : '你' }}</p>
           <template v-if="item.role === 'assistant'">
-            <div class="chat-markdown markdown-content" v-html="renderMarkdown(item.content)" />
-            <span
-              v-if="props.streamingAssistantMessageId === item.id"
-              class="stream-cursor"
-              aria-hidden="true"
-            >
-              ▌
-            </span>
+            <div v-if="isPendingAssistantMessage(item)" class="assistant-status">
+              <span class="assistant-status-orb" aria-hidden="true" />
+              <span class="assistant-status-text">{{ requestStatusText || item.content }}</span>
+            </div>
+            <template v-else>
+              <div class="chat-markdown markdown-content" v-html="renderMarkdown(item.content)" />
+              <span v-if="isStreamingAssistantMessage(item)" class="stream-cursor" aria-hidden="true">▌</span>
+            </template>
           </template>
           <p v-else class="chat-content">{{ item.content }}</p>
           <p v-if="item.score" class="score-tip">本轮评分 {{ item.score.score }} · {{ item.score.comment }}</p>
         </article>
-
-        <article v-if="isLoading && !isStreamingReply" class="chat-item assistant loading-card">
-          <p class="chat-role">{{ assistantName }}</p>
-          <p class="chat-content">正在思考中...</p>
-        </article>
       </div>
 
       <form class="composer" @submit.prevent="handleComposerSubmit">
-        <p class="composer-hint">输入你的回答（Enter 发送，Ctrl+Enter 换行，Ctrl+I 语音开关）</p>
-        <div class="composer-main">
+        <div
+          class="composer-shell"
+          :class="{
+            busy: isComposerBusy,
+            listening: isListening,
+            disabled: isLoading || sessionFinished,
+          }"
+        >
           <textarea
+            ref="answerInputRef"
             :value="inputText"
             class="answer-input"
-            rows="5"
-            placeholder=""
+            rows="1"
+            :placeholder="composerPlaceholder"
             :disabled="isLoading || sessionFinished"
             @input="emit('update:inputText', ($event.target as HTMLTextAreaElement).value)"
             @keydown="handleInputKeydown"
           />
-          <div class="composer-actions">
-            <button
-              type="button"
-              class="voice-btn"
-              :class="{ active: isListening }"
-              :disabled="!sessionStarted || sessionFinished || isLoading"
-              @click="emit('toggleVoice')"
-            >
-              {{ isListening ? '停止语音' : '语音' }}
-            </button>
-            <button type="submit" class="send-btn" :disabled="!canSend">发送</button>
+          <div class="composer-footer">
+            <div class="composer-meta">
+              <p class="composer-hint">{{ composerHintText }}</p>
+              <span
+                class="speech-pill"
+                :class="{
+                  active: isSpeechActive,
+                  listening: speechState === 'connected',
+                  transcribing: speechState === 'transcribing',
+                }"
+              >
+                {{ speechStatusText }}
+              </span>
+            </div>
+            <div class="composer-actions">
+              <button
+                type="button"
+                class="icon-btn voice-btn"
+                :class="{ active: isListening || speechState === 'transcribing' }"
+                :disabled="!canToggleVoice"
+                :aria-label="isListening ? '停止语音输入' : '开始语音输入'"
+                @click="emit('toggleVoice')"
+              >
+                <svg viewBox="0 0 24 24" aria-hidden="true">
+                  <path
+                    d="M12 3a3 3 0 0 1 3 3v5a3 3 0 0 1-6 0V6a3 3 0 0 1 3-3Zm-6 8a1 1 0 1 1 2 0 4 4 0 0 0 8 0 1 1 0 1 1 2 0 5.99 5.99 0 0 1-5 5.91V20h2a1 1 0 1 1 0 2H9a1 1 0 1 1 0-2h2v-3.09A5.99 5.99 0 0 1 6 11Z"
+                  />
+                </svg>
+              </button>
+              <button type="submit" class="icon-btn send-btn" :disabled="!canSend" aria-label="发送回答">
+                <span v-if="isComposerBusy" class="send-spinner" aria-hidden="true" />
+                <svg v-else viewBox="0 0 24 24" aria-hidden="true">
+                  <path d="M4.5 12 19 4.5l-3 15-4.5-5-5 4 1.5-6.5Z" />
+                </svg>
+              </button>
+            </div>
           </div>
         </div>
       </form>
@@ -387,9 +470,9 @@ watch(
   flex: 1;
   min-height: 0;
   border: 1px solid #eadfd1;
-  border-radius: 10px;
-  background: #fcfaf7;
-  padding: 10px;
+  border-radius: 14px;
+  background: linear-gradient(180deg, #fdfbf8 0%, #fbf7f1 100%);
+  padding: 12px;
   display: flex;
   flex-direction: column;
   gap: 8px;
@@ -404,16 +487,22 @@ watch(
 }
 
 .chat-item {
-  border-radius: 10px;
-  padding: 10px;
+  border-radius: 14px;
+  padding: 12px;
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  gap: 8px;
+  transition: border-color 0.2s ease, box-shadow 0.2s ease;
 }
 
 .chat-item.assistant {
-  background: #f5efe7;
-  border: 1px solid #e6dacc;
+  background: #f7f1ea;
+  border: 1px solid #e8ddd0;
+}
+
+.chat-item.assistant.pending {
+  border-color: #dfc9b7;
+  box-shadow: 0 10px 24px rgba(77, 57, 31, 0.06);
 }
 
 .chat-item.user {
@@ -439,6 +528,29 @@ watch(
   font-size: 13px;
   word-break: break-word;
   line-height: 1.65;
+}
+
+.assistant-status {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  color: #6f5c49;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.assistant-status-orb {
+  width: 10px;
+  height: 10px;
+  border-radius: 999px;
+  background: linear-gradient(180deg, #1f1c17 0%, #d97745 100%);
+  box-shadow: 0 0 0 8px rgba(217, 119, 69, 0.12);
+  animation: pulse 1.3s ease-in-out infinite;
+}
+
+.assistant-status-text {
+  min-width: 0;
+  word-break: break-word;
 }
 
 .markdown-content :deep(p) {
@@ -502,10 +614,6 @@ watch(
   padding: 6px 8px;
 }
 
-.loading-card {
-  opacity: 0.85;
-}
-
 .stream-cursor {
   display: inline-block;
   color: #d97745;
@@ -519,86 +627,194 @@ watch(
   }
 }
 
+@keyframes pulse {
+  50% {
+    transform: scale(1.15);
+    opacity: 0.85;
+  }
+}
+
 .composer {
   flex-shrink: 0;
+}
+
+.composer-shell {
   border: 1px solid #dfd2c2;
-  border-radius: 10px;
-  background: #f7f3ed;
-  padding: 10px 12px;
+  border-radius: 20px;
+  background: linear-gradient(180deg, #ffffff 0%, #fbf7f2 100%);
+  padding: 14px 14px 12px;
   display: flex;
   flex-direction: column;
-  gap: 10px;
+  gap: 12px;
+  box-shadow: 0 18px 36px rgba(45, 37, 33, 0.08);
+  transition: border-color 0.2s ease, box-shadow 0.2s ease;
 }
 
-.composer-hint {
-  color: #7b6f62;
-  font-size: 13px;
-  font-weight: 500;
+.composer-shell:focus-within {
+  border-color: #d97745;
+  box-shadow: 0 0 0 4px rgba(217, 119, 69, 0.12), 0 20px 40px rgba(45, 37, 33, 0.1);
 }
 
-.composer-main {
-  position: relative;
+.composer-shell.busy {
+  border-color: #d8c1b0;
+}
+
+.composer-shell.listening {
+  border-color: #d97745;
+}
+
+.composer-shell.disabled {
+  opacity: 0.82;
 }
 
 .answer-input {
   width: 100%;
-  border: 1px solid #dfd2c2;
-  border-radius: 8px;
-  background: #fff;
+  border: none;
+  background: transparent;
   color: #2d2521;
-  font-size: 13px;
-  line-height: 1.6;
-  padding: 12px 112px 12px 12px;
-  min-height: 118px;
-  resize: vertical;
+  font-size: 14px;
+  line-height: 1.7;
+  min-height: 116px;
+  max-height: 220px;
+  resize: none;
+  padding: 0;
+}
+
+.answer-input::placeholder {
+  color: #9a8674;
 }
 
 .answer-input:focus {
   outline: none;
-  border-color: #d97745;
-  box-shadow: 0 0 0 3px rgba(217, 119, 69, 0.12);
 }
 
-.composer-actions {
-  position: absolute;
-  right: 10px;
-  bottom: 10px;
+.composer-footer {
   display: flex;
   align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.composer-meta {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
   gap: 8px;
 }
 
-.voice-btn {
-  border: 1px solid #dfd2c2;
-  border-radius: 8px;
-  background: #fff;
-  color: #5f5448;
+.composer-hint {
+  color: #7b6f62;
   font-size: 12px;
+  font-weight: 600;
+}
+
+.speech-pill {
+  display: inline-flex;
+  align-items: center;
+  width: fit-content;
+  max-width: 100%;
+  border-radius: 999px;
+  border: 1px solid #e1d5c8;
+  background: #f6f1ea;
+  color: #7c6d60;
+  font-size: 11px;
   font-weight: 700;
-  padding: 9px 12px;
+  line-height: 1;
+  padding: 6px 10px;
+}
+
+.speech-pill.active {
+  border-color: #d8c3b0;
+  background: #fff7ee;
+  color: #8d5e38;
+}
+
+.speech-pill.listening {
+  border-color: #d97745;
+  background: rgba(217, 119, 69, 0.12);
+  color: #be5f28;
+}
+
+.speech-pill.transcribing {
+  border-color: #cba781;
+  background: #fff2e3;
+  color: #9c5b29;
+}
+
+.composer-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.icon-btn {
+  width: 42px;
+  height: 42px;
+  border-radius: 999px;
+  border: 1px solid transparent;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  transition: transform 0.18s ease, box-shadow 0.18s ease, background 0.18s ease, border-color 0.18s ease;
+}
+
+.icon-btn svg {
+  width: 18px;
+  height: 18px;
+  fill: currentColor;
+}
+
+.voice-btn {
+  border-color: #ddd2c6;
+  background: #fff;
+  color: #64594d;
   cursor: pointer;
+}
+
+.voice-btn:hover:not(:disabled) {
+  transform: translateY(-1px);
+  box-shadow: 0 12px 24px rgba(45, 37, 33, 0.08);
 }
 
 .voice-btn.active {
   border-color: #d97745;
-  color: #d97745;
+  background: rgba(217, 119, 69, 0.12);
+  color: #c65f23;
 }
 
 .send-btn {
   border: none;
-  border-radius: 8px;
   background: #1f1c17;
   color: #fff;
-  font-size: 12px;
-  font-weight: 700;
-  padding: 10px 14px;
   cursor: pointer;
+  box-shadow: 0 14px 26px rgba(31, 28, 23, 0.2);
+}
+
+.send-btn:hover:not(:disabled) {
+  transform: translateY(-1px) scale(1.01);
 }
 
 .send-btn:disabled,
 .voice-btn:disabled {
   opacity: 0.5;
   cursor: not-allowed;
+  box-shadow: none;
+  transform: none;
+}
+
+.send-spinner {
+  width: 16px;
+  height: 16px;
+  border-radius: 999px;
+  border: 2px solid rgba(255, 255, 255, 0.26);
+  border-top-color: #fff;
+  animation: spin 0.7s linear infinite;
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
 }
 
 @media (max-width: 768px) {
@@ -607,14 +823,26 @@ watch(
     align-items: flex-start;
   }
 
-  .answer-input {
-    min-height: 104px;
-    padding-right: 104px;
+  .composer-shell {
+    padding: 12px;
+    border-radius: 18px;
   }
 
-  .voice-btn,
-  .send-btn {
-    padding: 8px 10px;
+  .answer-input {
+    min-height: 104px;
+  }
+
+  .composer-footer {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .composer-meta {
+    width: 100%;
+  }
+
+  .composer-actions {
+    justify-content: flex-end;
   }
 }
 </style>
