@@ -1,9 +1,12 @@
+// author: jf
 export interface SpeechTranscriptionCallbacks {
   onPartialText?: (text: string) => void
   onFinalText?: (segment: string, mergedText: string) => void
-  onStateChange?: (state: 'connecting' | 'connected' | 'closed') => void
+  onStateChange?: (state: SpeechRuntimeState) => void
   onError?: (message: string) => void
 }
+
+export type SpeechRuntimeState = 'connecting' | 'connected' | 'transcribing' | 'closed'
 
 export interface BrowserSpeechTranscriptionOptions {
   language?: string

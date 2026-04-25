@@ -4,6 +4,22 @@ import sys
 from datetime import datetime, timezone
 from pathlib import Path
 
+# 应用入口需要最早统一 stdout/stderr 的编码。
+# Windows 下如果保留默认 gbk，AI 面试链路里的 uvicorn/error 日志在被外层按 UTF-8 收集时，
+# 会把类似 “[AI面试][RAG检索]” 的中文前缀打成 “闈㈣瘯” 这类乱码。
+# 这里在导入业务模块前重配标准流，保证 print 和 logging 两条链路都输出 UTF-8。
+def _configure_stdio_encoding() -> None:
+    for stream in (sys.stdout, sys.stderr):
+        if stream is None or not hasattr(stream, "reconfigure"):
+            continue
+        try:
+            stream.reconfigure(encoding="utf-8", errors="replace")
+        except (AttributeError, ValueError):
+            continue
+
+
+_configure_stdio_encoding()
+
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 

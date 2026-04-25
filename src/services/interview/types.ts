@@ -102,7 +102,11 @@ export type InterviewTurnRequestCompat = InterviewTurnRequest & {
   config?: LegacyInterviewConfig
 }
 
+export type InterviewRequestState = 'idle' | 'submitting' | 'accepted' | 'processing' | 'responding' | 'completed' | 'failed'
+
 export interface InterviewTurnStreamCallbacks {
+  onAccepted?: (message: string) => void
+  onProcessing?: (message: string) => void
   onAssistantReplyChunk?: (text: string) => void
 }
 

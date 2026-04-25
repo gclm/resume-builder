@@ -1,4 +1,5 @@
-﻿import type { Component } from 'vue'
+// author: jf
+import type { Component } from 'vue'
 
 export interface ResumeTemplateModel {
   key: string

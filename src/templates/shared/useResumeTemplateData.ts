@@ -1,4 +1,5 @@
-﻿import { computed } from 'vue'
+// author: jf
+import { computed } from 'vue'
 import { useResumeStore } from '@/stores/resume'
 import type { MetaIconKey } from './metaIcons'
 import { toHref } from './metaIcons'

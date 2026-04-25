@@ -10,6 +10,7 @@ import AwardsEditor from './editors/AwardsEditor.vue'
 import SelfIntroEditor from './editors/SelfIntroEditor.vue'
 import AiOptimizePanel from '@/components/ai/AiOptimizePanel.vue'
 import { getModuleIconPaths, MODULE_ICON_VIEWBOX } from '@/constants/moduleIcons'
+// author: jf
 
 const store = useResumeStore()
 const showSaved = ref(false)
@@ -17,6 +18,7 @@ const searchValue = ref('')
 const showAiPanel = ref(false)
 const moduleMenuOpen = ref(false)
 const moduleMenuRef = ref<HTMLElement | null>(null)
+const jsonImportInputRef = ref<HTMLInputElement | null>(null)
 const draggingModuleKey = ref<string | null>(null)
 const dragOverModuleKey = ref<string | null>(null)
 const nowTick = ref(Date.now())
@@ -141,6 +143,20 @@ function handleSave() {
   setTimeout(() => {
     showSaved.value = false
   }, 1800)
+}
+
+function triggerJsonImport() {
+  jsonImportInputRef.value?.click()
+}
+
+async function handleImportJson(event: Event) {
+  const input = event.target as HTMLInputElement
+  const file = input.files?.[0]
+  if (!file) return
+
+  const raw = await file.text()
+  input.value = ''
+  store.importResumeData(raw)
 }
 
 const isAutoSavePending = computed(() => store.nextAutoSaveAt !== null)
@@ -375,10 +391,18 @@ onUnmounted(() => {
       <div class="info-editor-header">
         <h2 class="editor-title">信息编辑区</h2>
         <div class="editor-header-actions">
+          <button class="btn-import" type="button" @click="triggerJsonImport">导入 JSON</button>
           <button class="btn-save" @click="handleSave">保存草稿</button>
         </div>
       </div>
       <p class="editor-subtitle">模块顺序与模块开关一致，点击右侧可展开/收起</p>
+      <input
+        ref="jsonImportInputRef"
+        type="file"
+        accept=".json,application/json"
+        style="display: none"
+        @change="handleImportJson"
+      />
       <transition name="fade">
         <p v-if="showSaved" class="save-hint">已保存</p>
       </transition>
@@ -943,6 +967,25 @@ onUnmounted(() => {
   font-size: 12px;
   font-weight: 600;
   cursor: pointer;
+}
+
+.btn-import {
+  height: 36px;
+  padding: 0 14px;
+  border-radius: 8px;
+  border: 1px solid #ddcfbf;
+  background: #fff;
+  color: #2d2521;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: border-color 0.18s ease, color 0.18s ease, background-color 0.18s ease;
+}
+
+.btn-import:hover {
+  border-color: #d97745;
+  color: #d97745;
+  background: #fff9f4;
 }
 
 .save-hint {

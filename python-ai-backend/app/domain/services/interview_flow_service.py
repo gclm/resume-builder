@@ -18,6 +18,13 @@ from app.domain.services.rag_retrieval_service import RagRetrieverService
 _ALLOWED_PHASES = {"opening", "skills", "work", "projects", "scenario", "written", "summary"}
 _LOGGER = logging.getLogger("uvicorn.error")
 _RAG_QUERY_EXECUTOR = ThreadPoolExecutor(max_workers=4, thread_name_prefix="interview-rag")
+_FINAL_EVALUATION_PASS_SCORE = 90
+_FINAL_EVALUATION_WEIGHTS = {
+    "projectScore": 0.70,
+    "skillScore": 0.20,
+    "workScore": 0.05,
+    "educationScore": 0.05,
+}
 
 
 class InterviewGraph:
@@ -94,11 +101,7 @@ class InterviewGraph:
     def _prepare_state(self, state: dict[str, Any]) -> dict[str, Any]:
         safe_mode = self._normalize_mode(state.get("mode"))
         safe_command = self._normalize_command(state.get("command"))
-        question = self._build_retrieval_query(
-            command=safe_command,
-            mode=safe_mode,
-            user_input=str(state.get("userInput") or "").strip(),
-        )
+        question = self._build_retrieval_query({**state, "mode": safe_mode, "command": safe_command})
         if safe_command == "finish":
             return {
                 **state,
@@ -116,8 +119,7 @@ class InterviewGraph:
         # 3) 检索失败不抛出到主链路，而是记录 ragError 作为可观察诊断信息。
         rag_answer, rag_sources, rag_error = self._safe_query_rag(query=question, top_k=self.rag_top_k)
         filtered_sources = self._filter_sources_by_similarity(rag_sources)
-        if not filtered_sources:
-            rag_answer = ""
+        rag_answer = self.rag_retriever.build_answer_from_sources(filtered_sources)
         self._log_interview_rag(
             mode=safe_mode,
             command=safe_command,
@@ -164,15 +166,98 @@ class InterviewGraph:
             )
         )
 
-    def _build_retrieval_query(self, command: str, mode: str, user_input: str) -> str:
-        del mode
+    def _build_retrieval_query(self, state: dict[str, Any]) -> str:
+        command = self._normalize_command(state.get("command"))
+        mode = self._normalize_mode(state.get("mode"))
+        user_input = self._truncate_text(state.get("userInput"), 240)
+        memory_summary = self._truncate_text(state.get("memorySummary"), 160)
+        resume_snapshot = state.get("resumeSnapshot") if isinstance(state.get("resumeSnapshot"), dict) else {}
+        latest_assistant_focus = self._build_latest_assistant_focus(state)
+        resume_keywords = self._build_resume_keyword_digest(resume_snapshot)
+
         if user_input:
-            return user_input
-        if command == "start":
-            return "候选人简历模拟面试开场"
-        if command == "finish":
-            return "模拟面试总结与改进建议"
-        return "继续下一轮中文模拟面试"
+            lead = "检索与当前轮次最相关的项目细节、技术方案、指标结果和追问线索。"
+        elif command == "start":
+            lead = "检索最适合开场自我介绍和首轮提问的项目亮点、岗位关键词与代表性经历。"
+        elif command == "finish":
+            lead = "检索模拟面试总结与改进建议。"
+        else:
+            lead = "检索下一轮模拟面试最相关的上下文。"
+
+        sections = [
+            f"模式：{'候选人模式（AI 面试官）' if mode == 'candidate' else '面试官模式（AI 候选人）'}",
+            f"命令：{command}",
+            f"检索目标：{lead}",
+        ]
+        if latest_assistant_focus:
+            sections.append(f"上一轮 AI 关注点：{latest_assistant_focus}")
+        if user_input:
+            sections.append(f"当前用户输入：{user_input}")
+        if memory_summary:
+            sections.append(f"记忆摘要：{memory_summary}")
+        if resume_keywords:
+            sections.append(f"简历关键词：{resume_keywords}")
+
+        return "\n".join(sections)
+
+    def _build_latest_assistant_focus(self, state: dict[str, Any]) -> str:
+        history = state.get("history")
+        if not isinstance(history, list):
+            return ""
+        for item in reversed(history):
+            if not isinstance(item, dict):
+                continue
+            role = str(item.get("role") or "").strip().lower()
+            if role != "assistant":
+                continue
+            content = self._truncate_text(item.get("content"), 180)
+            if content:
+                return content
+        return ""
+
+    def _build_resume_keyword_digest(self, resume_snapshot: dict[str, Any]) -> str:
+        if not isinstance(resume_snapshot, dict) or not resume_snapshot:
+            return ""
+
+        basic_info = resume_snapshot.get("basicInfo")
+        safe_basic_info = basic_info if isinstance(basic_info, dict) else {}
+        work_list = resume_snapshot.get("workList")
+        safe_work_list = work_list if isinstance(work_list, list) else []
+        project_list = resume_snapshot.get("projectList")
+        safe_project_list = project_list if isinstance(project_list, list) else []
+
+        parts: list[str] = []
+        job_title = self._truncate_text(safe_basic_info.get("jobTitle"), 50)
+        if job_title:
+            parts.append(f"岗位:{job_title}")
+
+        skills_text = self._truncate_text(resume_snapshot.get("skillsText"), 160)
+        if skills_text:
+            parts.append(f"技能:{skills_text}")
+
+        project_keywords: list[str] = []
+        for item in safe_project_list[:2]:
+            if not isinstance(item, dict):
+                continue
+            name = self._truncate_text(item.get("name"), 40)
+            role = self._truncate_text(item.get("role"), 30)
+            main_work = self._truncate_text(item.get("mainWork"), 80)
+            project_keywords.append(" / ".join(part for part in [name, role, main_work] if part))
+        if project_keywords:
+            parts.append(f"项目:{'; '.join(project_keywords)}")
+
+        work_keywords: list[str] = []
+        for item in safe_work_list[:2]:
+            if not isinstance(item, dict):
+                continue
+            company = self._truncate_text(item.get("company"), 30)
+            position = self._truncate_text(item.get("position"), 30)
+            description = self._truncate_text(item.get("description"), 60)
+            work_keywords.append(" / ".join(part for part in [company, position, description] if part))
+        if work_keywords:
+            parts.append(f"工作:{'; '.join(work_keywords)}")
+
+        return "\n".join(parts)
 
     def _default_mode_system_prompt(self, mode: str, resume_snapshot: dict[str, Any]) -> str:
         if mode == "interviewer":
@@ -353,7 +438,7 @@ class InterviewGraph:
         if not isinstance(sources, list):
             return []
 
-        filtered: list[dict[str, Any]] = []
+        normalized_sources: list[tuple[float, dict[str, Any]]] = []
         for item in sources:
             if not isinstance(item, dict):
                 continue
@@ -366,10 +451,33 @@ class InterviewGraph:
             except (TypeError, ValueError):
                 safe_similarity = 0.0
 
-            if safe_similarity < self.rag_similarity_threshold:
+            normalized_sources.append((safe_similarity, item))
+
+        if not normalized_sources:
+            return []
+
+        normalized_sources.sort(key=lambda pair: pair[0], reverse=True)
+        top_similarity = normalized_sources[0][0]
+        effective_threshold = self.rag_similarity_threshold
+        if effective_threshold <= 0:
+            effective_threshold = max(0.18, top_similarity - 0.12)
+
+        filtered: list[dict[str, Any]] = []
+        seen_signatures: set[str] = set()
+        for index, (safe_similarity, item) in enumerate(normalized_sources):
+            if safe_similarity < effective_threshold and not (index == 0 and safe_similarity >= 0.12):
                 continue
 
+            source_id = str(item.get("source_id") or "").strip()
+            content_signature = self._truncate_text(item.get("content"), 120)
+            signature = f"{source_id}:{content_signature}"
+            if signature in seen_signatures:
+                continue
+            seen_signatures.add(signature)
+
             filtered.append(item)
+            if len(filtered) >= min(self.rag_top_k, 4):
+                break
 
         return filtered
 
@@ -536,16 +644,30 @@ class InterviewGraph:
             else []
         )
         summary = str(raw_value.get("summary") or "").strip()
-        total_score = clamp(raw_value.get("totalScore"))
-        if not summary and total_score == 0 and not normalized_improvements:
-            return None
-        return {
+        normalized_dimension_scores = {
             "projectScore": clamp(raw_value.get("projectScore")),
             "skillScore": clamp(raw_value.get("skillScore")),
             "workScore": clamp(raw_value.get("workScore")),
             "educationScore": clamp(raw_value.get("educationScore")),
+        }
+        has_dimension_scores = any(
+            raw_value.get(field) is not None for field in _FINAL_EVALUATION_WEIGHTS
+        )
+        # 结束评分归一职责：
+        # 1) 模型负责输出四个维度分和总结，但不再让它自由决定最终总分。
+        # 2) 只要分项分存在，就统一按仓库约定权重重算 totalScore，避免前后端展示出的总分漂移。
+        # 3) passed 也统一由总分阈值推导，保证“通过 / 未通过”与总分一致。
+        weighted_total_score = round(
+            sum(normalized_dimension_scores[field] * weight for field, weight in _FINAL_EVALUATION_WEIGHTS.items())
+        )
+        total_score = weighted_total_score if has_dimension_scores else clamp(raw_value.get("totalScore"))
+        if not summary and total_score == 0 and not normalized_improvements:
+            return None
+        passed = total_score >= _FINAL_EVALUATION_PASS_SCORE
+        return {
+            **normalized_dimension_scores,
             "totalScore": total_score,
-            "passed": bool(raw_value.get("passed")),
+            "passed": passed,
             "summary": summary,
             "improvements": normalized_improvements,
         }

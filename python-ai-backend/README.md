@@ -114,6 +114,8 @@ start-python-backend.bat
 
 `/health/runtime` 会返回当前运行进程的 `pid`、工作目录、Python 可执行文件、应用入口文件和启动端口，适合排查是否命中了旧进程。
 
+补充说明：`app/main.py` 会在应用入口启动时统一将 `stdout/stderr` 重配为 UTF-8，用于避免 Windows 环境下 AI 面试、RAG 检索等中文日志被外层日志采集链路误解码后出现乱码。
+
 ### 备用方式：PowerShell 启动
 
 在项目根目录执行：
