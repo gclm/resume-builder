@@ -15,7 +15,7 @@ from app.domain.services.logical_document_splitter_service import LogicalDocumen
 from app.domain.services.rag_retrieval_service import RagRetrieverService
 from app.infrastructure.agents.autogen_runtime_adapter import AutoGenAgentRuntimeAdapter
 from app.infrastructure.config.settings import Settings, get_settings
-from app.infrastructure.factories.llm_factory import create_audio_client, create_chat_client, create_realtime_client
+from app.infrastructure.factories.llm_factory import create_chat_client, create_realtime_client
 from app.infrastructure.llm.openai_embedding_adapter import OpenAIEmbeddingAdapter
 from app.infrastructure.llm.ollama_embedding_adapter import OllamaEmbeddingAdapter
 from app.infrastructure.llm.openai_image_markdown_ocr_adapter import OpenAIImageMarkdownOcrAdapter
@@ -33,10 +33,6 @@ def resolve_settings() -> Settings:
 
 def build_chat_client(settings: Settings | None = None) -> ChatClientPort:
     return create_chat_client(settings)
-
-
-def build_audio_client(settings: Settings | None = None):
-    return create_audio_client(settings)
 
 
 def build_realtime_client(settings: Settings | None = None):

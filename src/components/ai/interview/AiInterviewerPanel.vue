@@ -9,7 +9,6 @@ import {
   type SpeechSession,
 } from '@/services/browserSpeechService'
 import { RealtimeTranscriptionSession } from '@/services/realtimeSpeechService'
-import { UploadSpeechTranscriptionSession } from '@/services/uploadSpeechService'
 import { useAiConfigStore } from '@/stores/aiConfig'
 import { useResumeStore } from '@/stores/resume'
 import {
@@ -42,22 +41,20 @@ const TEXT = {
   pass: '\u901a\u8fc7',
   fail: '\u672a\u901a\u8fc7',
   projectInterview: '\u9879\u76ee\u9762\u8bd5',
-  switchedToUploadSpeech: '实时语音不可用，已切换为后端音频转写',
-  switchedToBrowserSpeech: '\u5b9e\u65f6\u8bed\u97f3\u4e0d\u53ef\u7528\uff0c\u5df2\u5207\u6362\u4e3a\u6d4f\u89c8\u5668\u514d\u8d39\u8bed\u97f3\u8bc6\u522b',
-  speechUnavailable: '实时语音、后端音频转写与浏览器免费语音均不可用',
+  switchedToBrowserSpeech: '后端实时语音不可用，已切换为浏览器免费语音识别',
+  speechUnavailable: '后端实时语音与浏览器免费语音均不可用',
+  speechAutoDisabledNotice: '后端实时语音已因连续失败自动停用，可在语音配置中重新启用。',
   historyPlaceholder: '\u5386\u53f2\u4f1a\u8bdd',
   historyRefresh: '\u5237\u65b0\u5386\u53f2',
   historyLoading: '\u52a0\u8f7d\u4e2d...',
   sessionAlreadyFinished: '\u5f53\u524d\u4f1a\u8bdd\u5df2\u7ed3\u675f\uff0c\u4e0d\u53ef\u7ee7\u7eed\u6216\u53d1\u9001\u6d88\u606f\u3002',
   composerDefaultHint: 'Enter \u53d1\u9001\uff0cCtrl+Enter \u6362\u884c\uff0cCtrl+I \u8bed\u97f3\u5f00\u5173',
   composerListeningHint: '\u8bed\u97f3\u8f93\u5165\u4e2d\uff0c\u70b9\u51fb\u9ea6\u514b\u98ce\u7ed3\u675f',
-  composerRecordingHint: '录音中，点击麦克风结束后将自动转写',
   composerConnectingHint: '语音连接中，请稍候',
   composerTranscribingHint: '语音转写中，请稍候',
   composerFailedHint: '\u672c\u8f6e\u53d1\u9001\u672a\u5b8c\u6210\uff0c\u8bf7\u6839\u636e\u63d0\u793a\u8c03\u6574\u540e\u91cd\u8bd5',
   composerFinishedHint: '\u5f53\u524d\u4f1a\u8bdd\u5df2\u7ed3\u675f\uff0c\u5982\u9700\u7ee7\u7eed\u8bf7\u5148\u91cd\u7f6e',
   speechRealtimeLabel: '实时语音',
-  speechUploadLabel: '后端转写',
   speechBrowserLabel: '浏览器识别',
   speechPreferredLabel: '后端语音优先',
 } as const
@@ -65,8 +62,10 @@ const TEXT = {
 const resumeStore = useResumeStore()
 const aiConfigStore = useAiConfigStore()
 
-type SpeechEngine = 'realtime' | 'upload' | 'browser'
+type SpeechEngine = 'realtime' | 'browser'
 type SpeechUiState = Exclude<SpeechRuntimeState, 'closed'> | 'idle'
+
+const BACKEND_SPEECH_AUTO_DISABLE_THRESHOLD = 2
 
 const mode = ref<InterviewMode>('candidate')
 const durationMinutes = ref(60)
@@ -127,9 +126,6 @@ const speechStatusText = computed(() => {
     return `语音 · ${engineLabel}连接中`
   }
   if (speechUiState.value === 'connected') {
-    if (activeSpeechEngine.value === 'upload') {
-      return `语音 · ${engineLabel}录音中`
-    }
     if (activeSpeechEngine.value === 'browser') {
       return '语音 · 浏览器输入中'
     }
@@ -144,7 +140,7 @@ const composerHintText = computed(() => {
   if (speechUiState.value === 'connecting') return TEXT.composerConnectingHint
   if (speechUiState.value === 'transcribing') return `${resolveSpeechEngineLabel(activeSpeechEngine.value)}处理中，请稍候`
   if (isListening.value) {
-    return activeSpeechEngine.value === 'upload' ? TEXT.composerRecordingHint : TEXT.composerListeningHint
+    return TEXT.composerListeningHint
   }
   if (['submitting', 'accepted', 'processing', 'responding'].includes(requestState.value)) {
     return requestStatusText.value || TEXT.composerDefaultHint
@@ -169,9 +165,28 @@ const activeSpeechEngine = ref<SpeechEngine | null>(null)
 let switchingSpeechEngine = false
 let speechInputPrefix = ''
 let speechTranscript = ''
+let backendSpeechFailureCount = 0
 
 function newMessageId(): string {
   return `${Date.now()}_${Math.random().toString(36).slice(2, 8)}`
+}
+
+function resetBackendSpeechFailureState() {
+  backendSpeechFailureCount = 0
+}
+
+function trackBackendSpeechFailure(): boolean {
+  if (!aiConfigStore.useBackendSpeech) {
+    return false
+  }
+
+  backendSpeechFailureCount += 1
+  if (backendSpeechFailureCount < BACKEND_SPEECH_AUTO_DISABLE_THRESHOLD) {
+    return false
+  }
+
+  aiConfigStore.markBackendSpeechUnavailable()
+  return true
 }
 
 function resolveAssistantLabel(currentMode: InterviewMode): string {
@@ -180,7 +195,6 @@ function resolveAssistantLabel(currentMode: InterviewMode): string {
 
 function resolveSpeechEngineLabel(engine: SpeechEngine | null): string {
   if (engine === 'realtime') return TEXT.speechRealtimeLabel
-  if (engine === 'upload') return TEXT.speechUploadLabel
   if (engine === 'browser') return TEXT.speechBrowserLabel
   return aiConfigStore.shouldRequestBackendSpeech ? TEXT.speechPreferredLabel : TEXT.speechBrowserLabel
 }
@@ -313,13 +327,6 @@ async function createSpeechSession(engine: SpeechEngine): Promise<SpeechSession>
     })
   }
 
-  if (engine === 'upload') {
-    return new UploadSpeechTranscriptionSession({
-      language: 'zh',
-      callbacks: buildSpeechCallbacks('upload'),
-    })
-  }
-
   return new BrowserSpeechTranscriptionSession({
     language: 'zh-CN',
     callbacks: buildSpeechCallbacks('browser'),
@@ -333,6 +340,10 @@ async function activateSpeechEngine(engine: SpeechEngine) {
   speechUiState.value = 'connecting'
   try {
     await session.start()
+    if (engine === 'realtime') {
+      resetBackendSpeechFailureState()
+      aiConfigStore.clearBackendSpeechUnavailable()
+    }
   } catch (error) {
     speechSession = null
     activeSpeechEngine.value = null
@@ -367,58 +378,27 @@ function stopSpeechSafely(clearSpeechText: boolean) {
   })
 }
 
-async function trySwitchToBrowserSpeech(reason: string, markBackendUnavailable = false): Promise<boolean> {
+async function trySwitchToBrowserSpeech(reason: string, trackBackendFailure = false): Promise<boolean> {
   if (switchingSpeechEngine) {
     return false
   }
 
   switchingSpeechEngine = true
+  const backendSpeechAutoDisabled = trackBackendFailure ? trackBackendSpeechFailure() : false
+  const autoDisabledNotice = backendSpeechAutoDisabled ? `\n${TEXT.speechAutoDisabledNotice}` : ''
   try {
-    if (markBackendUnavailable) {
-      aiConfigStore.markBackendSpeechUnavailable()
-    }
+    const preservedInput = inputText.value.trim()
     await stopSpeech(false)
+    speechInputPrefix = preservedInput
+    speechTranscript = ''
+    inputText.value = preservedInput
     await activateSpeechEngine('browser')
-    errorMsg.value = `${TEXT.switchedToBrowserSpeech}\n${reason}`
+    errorMsg.value = `${TEXT.switchedToBrowserSpeech}\n${reason}${autoDisabledNotice}`
     return true
   } catch (fallbackError) {
     const fallbackMessage = formatErrorMessage(fallbackError)
-    errorMsg.value = `${TEXT.speechUnavailable}\n${reason}\n${fallbackMessage}`
+    errorMsg.value = `${TEXT.speechUnavailable}\n${reason}${autoDisabledNotice}\n${fallbackMessage}`
     return false
-  } finally {
-    switchingSpeechEngine = false
-  }
-}
-
-async function trySwitchFromRealtimeToUpload(reason: string): Promise<boolean> {
-  if (switchingSpeechEngine) {
-    return false
-  }
-
-  switchingSpeechEngine = true
-  try {
-    await stopSpeech(false)
-    speechInputPrefix = inputText.value.trim()
-    speechTranscript = ''
-    inputText.value = speechInputPrefix
-
-    try {
-      await activateSpeechEngine('upload')
-      errorMsg.value = `${TEXT.switchedToUploadSpeech}\n${reason}`
-      return true
-    } catch (uploadError) {
-      const uploadMessage = formatErrorMessage(uploadError)
-      aiConfigStore.markBackendSpeechUnavailable()
-      try {
-        await activateSpeechEngine('browser')
-        errorMsg.value = `${TEXT.switchedToBrowserSpeech}\n${reason}\n${uploadMessage}`
-        return true
-      } catch (browserError) {
-        const browserMessage = formatErrorMessage(browserError)
-        errorMsg.value = `${TEXT.speechUnavailable}\n${reason}\n${uploadMessage}\n${browserMessage}`
-        return false
-      }
-    }
   } finally {
     switchingSpeechEngine = false
   }
@@ -426,8 +406,12 @@ async function trySwitchFromRealtimeToUpload(reason: string): Promise<boolean> {
 
 async function handleRealtimeSpeechError(message: string) {
   if (activeSpeechEngine.value === 'realtime') {
-    const switched = await trySwitchFromRealtimeToUpload(message)
+    const switched = await trySwitchToBrowserSpeech(message, true)
     if (switched) {
+      return
+    }
+    if (errorMsg.value) {
+      stopSpeechSafely(false)
       return
     }
   }
@@ -460,31 +444,26 @@ async function startSpeech() {
     await activateSpeechEngine('realtime')
   } catch (error) {
     const realtimeMessage = formatErrorMessage(error)
-
-    try {
-      await activateSpeechEngine('upload')
-      errorMsg.value = `${TEXT.switchedToUploadSpeech}\n${realtimeMessage}`
+    const switched = await trySwitchToBrowserSpeech(realtimeMessage, true)
+    if (switched) {
       return
-    } catch (uploadError) {
-      const uploadMessage = formatErrorMessage(uploadError)
-      const switched = await trySwitchToBrowserSpeech(`${realtimeMessage}\n${uploadMessage}`, true)
-      if (switched) {
-        return
-      }
+    }
 
-      isListening.value = false
-      speechUiState.value = 'idle'
-      speechTranscript = ''
-      inputText.value = speechInputPrefix
-      speechInputPrefix = ''
-      activeSpeechEngine.value = null
-      errorMsg.value = `${TEXT.speechUnavailable}\n${realtimeMessage}\n${uploadMessage}`
+    isListening.value = false
+    speechUiState.value = 'idle'
+    speechTranscript = ''
+    inputText.value = speechInputPrefix
+    speechInputPrefix = ''
+    activeSpeechEngine.value = null
+    if (!errorMsg.value) {
+      errorMsg.value = `${TEXT.speechUnavailable}\n${realtimeMessage}`
     }
   }
 }
 
 function resetSession() {
   stopSpeechSafely(true)
+  resetBackendSpeechFailureState()
   messages.value = []
   finalEvaluation.value = null
   memorySummary.value = ''

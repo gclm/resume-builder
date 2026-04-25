@@ -92,10 +92,6 @@ class Settings:
     openai_vision_base_url: str
     openai_vision_api_key: str
     openai_vision_timeout_seconds: float
-    openai_speech_base_url: str
-    openai_speech_api_key: str
-    openai_speech_transcriptions_path: str
-    openai_speech_transcription_model: str
     openai_realtime_base_url: str
     openai_realtime_api_key: str
     openai_realtime_client_secrets_path: str
@@ -186,12 +182,8 @@ def get_settings() -> Settings:
         openai_vision_base_url=_get_first_non_empty("OPENAI_VISION_BASE_URL", "OPENAI_CHAT_BASE_URL", "OPENAI_BASE_URL", default=openai_base_url),
         openai_vision_api_key=_get_first_non_empty("OPENAI_VISION_API_KEY", "OPENAI_CHAT_API_KEY", "OPENAI_API_KEY", default=openai_api_key),
         openai_vision_timeout_seconds=max(3.0, _get_float("OPENAI_VISION_TIMEOUT_SECONDS", 40.0)),
-        openai_speech_base_url=_get_first_non_empty("OPENAI_SPEECH_BASE_URL", "OPENAI_BASE_URL", default=openai_base_url),
-        openai_speech_api_key=_get_first_non_empty("OPENAI_SPEECH_API_KEY", "OPENAI_API_KEY", default=openai_api_key),
-        openai_speech_transcriptions_path=os.getenv("OPENAI_SPEECH_TRANSCRIPTIONS_PATH", "/v1/audio/transcriptions"),
-        openai_speech_transcription_model=os.getenv("OPENAI_SPEECH_TRANSCRIPTION_MODEL", "gpt-4o-mini-transcribe"),
-        openai_realtime_base_url=_get_first_non_empty("OPENAI_REALTIME_BASE_URL", "OPENAI_SPEECH_BASE_URL", "OPENAI_BASE_URL", default=openai_base_url),
-        openai_realtime_api_key=_get_first_non_empty("OPENAI_REALTIME_API_KEY", "OPENAI_SPEECH_API_KEY", "OPENAI_API_KEY", default=openai_api_key),
+        openai_realtime_base_url=_get_first_non_empty("OPENAI_REALTIME_BASE_URL", "OPENAI_BASE_URL", default=openai_base_url),
+        openai_realtime_api_key=_get_first_non_empty("OPENAI_REALTIME_API_KEY", "OPENAI_API_KEY", default=openai_api_key),
         openai_realtime_client_secrets_path=os.getenv("OPENAI_REALTIME_CLIENT_SECRETS_PATH", "/v1/realtime/client_secrets"),
         openai_realtime_calls_path=os.getenv("OPENAI_REALTIME_CALLS_PATH", "/v1/realtime/calls"),
         openai_realtime_transcription_model=os.getenv("OPENAI_REALTIME_TRANSCRIPTION_MODEL", "gpt-4o-transcribe"),

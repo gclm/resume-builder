@@ -14,9 +14,6 @@ spring:
     openai:
       base-url: ${OPENAI_BASE_URL:${OPENAI_CHAT_BASE_URL:https://api.openai.com}}
       api-key: ${OPENAI_API_KEY:${OPENAI_CHAT_API_KEY:}}
-      speech:
-        base-url: ${OPENAI_SPEECH_BASE_URL:${OPENAI_BASE_URL:${OPENAI_CHAT_BASE_URL:https://api.openai.com}}}
-        api-key: ${OPENAI_SPEECH_API_KEY:${OPENAI_API_KEY:${OPENAI_CHAT_API_KEY:}}}
       chat:
         base-url: ${OPENAI_CHAT_BASE_URL:${OPENAI_BASE_URL:https://api.openai.com}}
         api-key: ${OPENAI_CHAT_API_KEY:${OPENAI_API_KEY:}}
@@ -24,8 +21,8 @@ spring:
         options:
           model: ${OPENAI_CHAT_MODEL:gpt-5.4}
       realtime:
-        base-url: ${OPENAI_REALTIME_BASE_URL:${OPENAI_SPEECH_BASE_URL:${OPENAI_BASE_URL:https://api.openai.com}}}
-        api-key: ${OPENAI_REALTIME_API_KEY:${OPENAI_SPEECH_API_KEY:${OPENAI_API_KEY:}}}
+        base-url: ${OPENAI_REALTIME_BASE_URL:${OPENAI_BASE_URL:https://api.openai.com}}
+        api-key: ${OPENAI_REALTIME_API_KEY:${OPENAI_API_KEY:}}
         client-secrets-path: ${OPENAI_REALTIME_CLIENT_SECRETS_PATH:/v1/realtime/client_secrets}
         calls-path: ${OPENAI_REALTIME_CALLS_PATH:/v1/realtime/calls}
         transcription-model: ${OPENAI_REALTIME_TRANSCRIPTION_MODEL:gpt-4o-transcribe}

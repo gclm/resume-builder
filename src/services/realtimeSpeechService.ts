@@ -8,16 +8,16 @@ import {
 import type { SpeechRuntimeState } from '@/services/browserSpeechService'
 
 const TEXT = {
-  getSecretFailed: '\u83b7\u53d6\u5b9e\u65f6\u8bed\u97f3\u4f1a\u8bdd\u5931\u8d25',
-  missingSecret: '\u540e\u7aef\u672a\u8fd4\u56de\u53ef\u7528\u7684\u5b9e\u65f6\u4f1a\u8bdd\u5bc6\u94a5',
-  missingRealtimeBaseUrl: '\u540e\u7aef\u672a\u8fd4\u56de\u5b9e\u65f6\u670d\u52a1\u5730\u5740',
-  unsupportedMediaDevice: '\u5f53\u524d\u6d4f\u89c8\u5668\u4e0d\u652f\u6301\u9ea6\u514b\u98ce\u8bbf\u95ee',
-  unsupportedWebrtc: '\u5f53\u524d\u6d4f\u89c8\u5668\u4e0d\u652f\u6301\u5b9e\u65f6\u8bed\u97f3\u8bc6\u522b',
-  dataChannelError: '\u5b9e\u65f6\u8bed\u97f3\u901a\u9053\u5f02\u5e38\uff0c\u8bf7\u91cd\u8bd5',
-  connectionDisconnected: '\u5b9e\u65f6\u8bed\u97f3\u8fde\u63a5\u65ad\u5f00\uff0c\u8bf7\u91cd\u8bd5',
-  connectFailed: '\u5efa\u7acb\u5b9e\u65f6\u8bed\u97f3\u8fde\u63a5\u5931\u8d25',
-  recognitionFailed: '\u5b9e\u65f6\u8bed\u97f3\u8bc6\u522b\u5931\u8d25',
-  connectionTimeout: '\u5b9e\u65f6\u8bed\u97f3\u8fde\u63a5\u8d85\u65f6\uff0c\u8bf7\u91cd\u8bd5',
+  getSecretFailed: '获取实时语音会话失败',
+  missingSecret: '后端未返回可用的实时会话密钥',
+  missingRealtimeBaseUrl: '后端未返回实时服务地址',
+  unsupportedMediaDevice: '当前浏览器不支持麦克风访问',
+  unsupportedWebrtc: '当前浏览器不支持实时语音识别',
+  dataChannelError: '实时语音通道异常，请重试',
+  connectionDisconnected: '实时语音连接断开，请重试',
+  connectFailed: '建立实时语音连接失败',
+  recognitionFailed: '实时语音识别失败',
+  connectionTimeout: '实时语音连接超时，请重试',
 } as const
 
 export interface RealtimeTranscriptionCallbacks {

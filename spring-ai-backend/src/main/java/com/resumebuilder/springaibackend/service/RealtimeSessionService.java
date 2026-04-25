@@ -31,8 +31,8 @@ public class RealtimeSessionService {
 
     public RealtimeSessionService(
             ObjectMapper objectMapper,
-            @Value("${spring.ai.openai.realtime.base-url:${OPENAI_REALTIME_BASE_URL:${OPENAI_SPEECH_BASE_URL:${OPENAI_BASE_URL:https://api.openai.com}}}}") String realtimeBaseUrl,
-            @Value("${spring.ai.openai.realtime.api-key:${OPENAI_REALTIME_API_KEY:${OPENAI_SPEECH_API_KEY:${OPENAI_API_KEY:}}}}") String realtimeApiKey,
+            @Value("${spring.ai.openai.realtime.base-url:${OPENAI_REALTIME_BASE_URL:${OPENAI_BASE_URL:https://api.openai.com}}}") String realtimeBaseUrl,
+            @Value("${spring.ai.openai.realtime.api-key:${OPENAI_REALTIME_API_KEY:${OPENAI_API_KEY:}}}") String realtimeApiKey,
             @Value("${spring.ai.openai.realtime.client-secrets-path:${OPENAI_REALTIME_CLIENT_SECRETS_PATH:/v1/realtime/client_secrets}}") String clientSecretsPath,
             @Value("${spring.ai.openai.realtime.calls-path:${OPENAI_REALTIME_CALLS_PATH:/v1/realtime/calls}}") String realtimeCallsPath,
             @Value("${spring.ai.openai.realtime.transcription-model:${OPENAI_REALTIME_TRANSCRIPTION_MODEL:gpt-4o-transcribe}}") String defaultModel,

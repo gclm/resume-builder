@@ -1,6 +1,5 @@
 # author: jf
 from app.infrastructure.config.settings import Settings, get_settings
-from app.infrastructure.llm.openai_audio_adapter import OpenAIAudioAdapter
 from app.infrastructure.llm.openai_chat_adapter import OpenAIChatAdapter
 from app.infrastructure.llm.openai_realtime_adapter import OpenAIRealtimeAdapter
 
@@ -13,16 +12,6 @@ def create_chat_client(settings: Settings | None = None) -> OpenAIChatAdapter:
         api_key=resolved.openai_api_key,
         completions_path=resolved.openai_chat_completions_path,
         timeout_seconds=resolved.openai_chat_timeout_seconds,
-    )
-
-
-def create_audio_client(settings: Settings | None = None) -> OpenAIAudioAdapter:
-    resolved = settings or get_settings()
-    return OpenAIAudioAdapter(
-        base_url=resolved.openai_speech_base_url,
-        api_key=resolved.openai_speech_api_key,
-        transcriptions_path=resolved.openai_speech_transcriptions_path,
-        default_model=resolved.openai_speech_transcription_model,
     )
 
 

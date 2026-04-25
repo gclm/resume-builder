@@ -38,18 +38,18 @@ function handleCancel() {
           </button>
         </div>
 
-        <p class="dialog-desc">当前仅保留语音配置，模型与 API 参数请在后端维护。启用后会优先尝试后端实时语音，失败时回退到后端音频转写，再回退到浏览器免费语音识别。</p>
+        <p class="dialog-desc">当前仅保留实时语音配置，模型与 API 参数请在后端维护。启用后会优先尝试后端实时语音，失败时回退到浏览器免费语音识别。</p>
 
         <div class="dialog-body">
           <div class="form-group">
             <label class="form-label">语音路由</label>
             <label class="switch-row">
               <input v-model="useBackendSpeech" type="checkbox" />
-              <span>启用后端语音优先链路</span>
+              <span>启用后端实时语音优先链路</span>
             </label>
-            <span class="form-hint">关闭后将始终使用浏览器免费语音识别，不再尝试后端实时语音和后端音频转写。</span>
+            <span class="form-hint">关闭后将始终使用浏览器免费语音识别，不再尝试后端实时语音。</span>
             <span v-if="store.backendSpeechAutoDisabled && useBackendSpeech" class="speech-status">
-              后端语音链路在运行时连续失败后已自动停用。点击保存一次可重新尝试后端语音。
+              后端实时语音链路在运行时连续失败后已自动停用。点击保存一次可重新尝试后端实时语音。
             </span>
           </div>
         </div>

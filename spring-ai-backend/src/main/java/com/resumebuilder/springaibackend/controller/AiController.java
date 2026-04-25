@@ -1,6 +1,5 @@
 package com.resumebuilder.springaibackend.controller;
 
-import com.resumebuilder.springaibackend.dto.AudioTranscriptionResponse;
 import com.resumebuilder.springaibackend.dto.ChatRequest;
 import com.resumebuilder.springaibackend.dto.ChatResponse;
 import com.resumebuilder.springaibackend.dto.RagIngestRequest;
@@ -14,7 +13,6 @@ import com.resumebuilder.springaibackend.dto.InterviewSessionSummaryResponse;
 import com.resumebuilder.springaibackend.dto.InterviewStreamEvent;
 import com.resumebuilder.springaibackend.dto.InterviewTurnRequest;
 import com.resumebuilder.springaibackend.service.AiGatewayService;
-import com.resumebuilder.springaibackend.service.AudioTranscriptionService;
 import com.resumebuilder.springaibackend.service.RealtimeSessionService;
 import com.resumebuilder.springaibackend.service.InterviewSessionStoreService;
 import com.resumebuilder.springaibackend.service.InterviewTurnService;
@@ -25,12 +23,10 @@ import org.springframework.http.codec.ServerSentEvent;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
-import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
-import org.springframework.web.bind.annotation.RequestPart;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
-import org.springframework.web.multipart.MultipartFile;
 import reactor.core.publisher.Flux;
 
 @RestController
@@ -39,20 +35,17 @@ public class AiController {
 
     private final AiGatewayService aiGatewayService;
     private final InterviewTurnService interviewTurnService;
-    private final AudioTranscriptionService audioTranscriptionService;
     private final RealtimeSessionService realtimeSessionService;
     private final InterviewSessionStoreService interviewSessionStoreService;
 
     public AiController(
             AiGatewayService aiGatewayService,
             InterviewTurnService interviewTurnService,
-            AudioTranscriptionService audioTranscriptionService,
             RealtimeSessionService realtimeSessionService,
             InterviewSessionStoreService interviewSessionStoreService
     ) {
         this.aiGatewayService = aiGatewayService;
         this.interviewTurnService = interviewTurnService;
-        this.audioTranscriptionService = audioTranscriptionService;
         this.realtimeSessionService = realtimeSessionService;
         this.interviewSessionStoreService = interviewSessionStoreService;
     }
@@ -74,16 +67,6 @@ public class AiController {
                                 .data(ex.getMessage() == null ? "stream failed" : ex.getMessage())
                                 .build()
                 ));
-    }
-
-    @PostMapping(value = "/audio/transcriptions", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
-    public AudioTranscriptionResponse transcribeAudio(
-            @RequestPart("file") MultipartFile file,
-            @RequestPart(value = "model", required = false) String model,
-            @RequestPart(value = "language", required = false) String language,
-            @RequestPart(value = "prompt", required = false) String prompt
-    ) {
-        return audioTranscriptionService.transcribe(file, model, language, prompt);
     }
 
     @PostMapping("/realtime/client-secret")
@@ -123,4 +106,3 @@ public class AiController {
         return new RagIngestResponse(aiGatewayService.ingestDocuments(request));
     }
 }
-

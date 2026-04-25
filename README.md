@@ -1,7 +1,26 @@
 <!-- author: jf -->
 # Resume Builder
 
-一个基于 Vue 3 + Vite 的简历编辑与 AI 面试一体化项目，当前同时支持 `spring-ai-backend` 和 `python-ai-backend` 两套后端实现，覆盖简历优化、AI 面试、知识库入库与检索、流式回复、语音输入与会话存储。
+一个基于 Vue 3 + Vite 的简历编辑与 AI 面试一体化项目，当前同时支持 `spring-ai-backend` 和 `python-ai-backend` 两套后端实现，覆盖简历优化、AI 面试、知识库入库与检索、流式回复、Realtime 语音输入与会话存储。
+
+## 语音功能说明
+
+### 当前链路
+
+- 语音输入目前只在 AI 面试面板里使用，快捷键 `Ctrl + I` 可开始或结束语音输入。
+- 当前前端语音策略是“后端实时语音优先，浏览器免费语音识别回退”。
+- 开启“启用后端实时语音优先链路”后，前端会先请求 `POST /api/ai/realtime/client-secret`。
+- 后端返回 `clientSecret`、`realtimeApiBaseUrl`、`realtimeCallsPath` 后，浏览器会直接通过 WebRTC + SDP 与上游 Realtime 服务建链；后端不再接收上传音频做转写。
+- 如果后端 Realtime 鉴权、建链或识别过程中失败，前端会自动回退到浏览器免费语音识别（Web Speech API）。
+- 同一轮运行中，后端实时语音连续失败 `2` 次后，前端会自动停用后端语音优先链路；进入“AI 配置”弹窗重新保存一次即可恢复尝试。
+- 如果你在“AI 配置”里手动关闭后端语音优先链路，前端将始终只使用浏览器免费语音识别。
+- 当前仓库已不再提供 `/api/ai/audio/transcriptions`，也不再保留“录音上传到后端再转写”的兜底方案。
+
+### 配置位置
+
+- 前端页面当前只保留语音路由开关，不再在弹窗里维护模型、Base URL 或 API Key。
+- Realtime 模型、语言、上游 Base URL、API Key、client secret 路径与 calls 路径，统一在对应后端的 `.env` 中维护。
+- 浏览器免费语音识别不依赖后端 Key，但依赖浏览器是否支持 Web Speech API，以及当前页面是否拿到麦克风权限。
 
 ## 功能概览
 
@@ -30,6 +49,7 @@
 - 语音输入：
   - 优先使用后端实时语音
   - 不可用时自动降级到浏览器语音识别
+  - 后端实时语音连续失败 `2` 次后会自动停用，可在语音配置中重新启用
   - 快捷键 `Ctrl + I` 开关语音
 - 已结束会话不可继续/发送消息
 - 在 `python-ai-backend` 下，AI 面试链路会先从 pgvector 检索项目资料、知识点和面试题上下文，再把命中内容注入本轮问答，提升回答真实性，减少内容过宽泛、脱离简历或发生漂移
@@ -99,7 +119,7 @@ npm run dev
 - AI 优化
 - AI 面试
 - 知识库上传 / OCR / 向量检索
-- Realtime 语音、音频转写
+- AI 面试实时语音
 
 当前更推荐优先启动 `python-ai-backend`，因为知识库统一上传、图片 OCR 入库，以及 AI 面试结合向量库检索项目资料/面试题上下文的链路说明更完整。
 
@@ -151,7 +171,7 @@ npm run dev
 #### 方案 B1：启动 Spring AI 后端
 
 1. 将 `spring-ai-backend/.env.example` 复制为 `spring-ai-backend/.env`。
-2. 建议至少显式配置以下最小必填项；如果你不拆分不同供应商的 Key，`OPENAI_API_KEY` 一项即可作为 Chat / Speech / Realtime / Embedding 的默认 Key：
+2. 建议至少显式配置以下最小必填项；如果你不拆分不同供应商的 Key，`OPENAI_API_KEY` 一项即可作为 Chat / Realtime / Embedding 的默认 Key：
 
 ```bash
 OPENAI_API_KEY=your_api_key_here
@@ -164,6 +184,19 @@ PGVECTOR_DATASOURCE_PASSWORD=postgres
 SERVER_PORT=8999
 APP_CORS_ALLOWED_ORIGINS=http://localhost:5173
 ```
+
+如果要启用 AI 面试实时语音，建议再补一组 Realtime 配置：
+
+```bash
+OPENAI_REALTIME_BASE_URL=https://api.openai.com
+OPENAI_REALTIME_API_KEY=your_realtime_api_key_here
+OPENAI_REALTIME_CLIENT_SECRETS_PATH=/v1/realtime/client_secrets
+OPENAI_REALTIME_CALLS_PATH=/v1/realtime/calls
+OPENAI_REALTIME_TRANSCRIPTION_MODEL=gpt-4o-transcribe
+OPENAI_REALTIME_LANGUAGE=zh
+```
+
+不单独拆分供应商时，`OPENAI_REALTIME_BASE_URL` / `OPENAI_REALTIME_API_KEY` 也可以直接复用 `OPENAI_BASE_URL` / `OPENAI_API_KEY`。
 
 3. 在 `spring-ai-backend/` 目录启动后端：
 
@@ -180,7 +213,7 @@ mvn spring-boot:run
 #### 方案 B2：启动 Python AI 后端（推荐）
 
 1. 将 `python-ai-backend/.env.example` 复制为 `python-ai-backend/.env`。
-2. 推荐至少显式配置以下最小可用项；其中 `OPENAI_API_KEY` 可作为 Chat / Embedding / OCR / Speech / Realtime 的统一默认 Key，专用 `OPENAI_*_API_KEY` 不配时会自动回退：
+2. 推荐至少显式配置以下最小可用项；其中 `OPENAI_API_KEY` 可作为 Chat / Embedding / OCR / Realtime 的统一默认 Key，专用 `OPENAI_*_API_KEY` 不配时会自动回退：
 
 ```bash
 SERVER_PORT=8999
@@ -195,6 +228,19 @@ MYSQL_DATASOURCE_URL=mysql+pymysql://root:root@127.0.0.1:3306/resume-builder
 PGVECTOR_DATASOURCE_URL=postgresql+psycopg://postgres:postgres@127.0.0.1:5432/resume_builder_vector
 AUTOGEN_ENABLED=false
 ```
+
+如果要启用 AI 面试实时语音，建议再补：
+
+```bash
+OPENAI_REALTIME_BASE_URL=https://api.openai.com
+OPENAI_REALTIME_API_KEY=your_realtime_api_key_here
+OPENAI_REALTIME_CLIENT_SECRETS_PATH=/v1/realtime/client_secrets
+OPENAI_REALTIME_CALLS_PATH=/v1/realtime/calls
+OPENAI_REALTIME_TRANSCRIPTION_MODEL=gpt-4o-transcribe
+OPENAI_REALTIME_LANGUAGE=zh
+```
+
+不拆分供应商时，`OPENAI_REALTIME_BASE_URL` / `OPENAI_REALTIME_API_KEY` 可以直接回退到 `OPENAI_BASE_URL` / `OPENAI_API_KEY`。
 
 3. 首次运行前，在 `python-ai-backend/` 目录安装依赖：
 
@@ -246,6 +292,13 @@ docker compose up --build -d
 - 当前推荐保持后端端口为 `8999`，切换后端实现时无需改前端代理。
 - `spring-ai-backend` 和 `python-ai-backend` 共享这一代理端口，所以同一时间只能启动一个后端。
 
+### 语音相关配置
+
+- 前端没有额外的 `.env` 语音变量；页面里的“AI 配置”弹窗当前只负责切换 `useBackendSpeech` 开关，并把状态保存在浏览器 `localStorage`。
+- 两套后端都通过 `POST /api/ai/realtime/client-secret` 向前端下发实时语音临时密钥。
+- 这个接口当前可接收可选的 `model`、`language`，并返回 `clientSecret`、`realtimeApiBaseUrl`、`realtimeCallsPath`；前端随后会直接向上游 Realtime 服务发起 SDP 建链。
+- 如果你只想让前端始终走浏览器免费语音识别，可以直接在页面里关闭“启用后端实时语音优先链路”，不需要改后端 `.env`。
+
 ### 后端环境变量
 
 只要你准备启动任意后端，建议优先把以下公共最小项配好：
@@ -289,14 +342,14 @@ APP_CORS_ALLOWED_ORIGINS=http://localhost:5173
 可选分路配置（不同模型/供应商）：
 
 - Chat：`OPENAI_CHAT_BASE_URL`、`OPENAI_CHAT_API_KEY`、`OPENAI_CHAT_MODEL`
-- Speech：`OPENAI_SPEECH_BASE_URL`、`OPENAI_SPEECH_API_KEY`
-- Realtime：`OPENAI_REALTIME_BASE_URL`、`OPENAI_REALTIME_API_KEY`
-- Embedding：`OPENAI_EMBEDDING_BASE_URL`、`OPENAI_EMBEDDING_API_KEY`、`OPENAI_EMBEDDING_MODEL`、`OPENAI_EMBEDDING_TIMEOUT_SECONDS`
+- Realtime：`OPENAI_REALTIME_BASE_URL`、`OPENAI_REALTIME_API_KEY`、`OPENAI_REALTIME_CLIENT_SECRETS_PATH`、`OPENAI_REALTIME_CALLS_PATH`、`OPENAI_REALTIME_TRANSCRIPTION_MODEL`、`OPENAI_REALTIME_LANGUAGE`
+- Embedding：`OPENAI_EMBEDDING_BASE_URL`、`OPENAI_EMBEDDING_API_KEY`、`OPENAI_EMBEDDINGS_PATH`、`OPENAI_EMBEDDING_MODEL`
 
 建议理解为：
 
 - 只想快速跑通：先配 `OPENAI_API_KEY + MySQL + pgvector + 端口/CORS`
-- 需要分供应商或分模型：再补对应的 `OPENAI_CHAT_*`、`OPENAI_SPEECH_*`、`OPENAI_REALTIME_*`、`OPENAI_EMBEDDING_*`
+- 需要分供应商或分模型：再补对应的 `OPENAI_CHAT_*`、`OPENAI_REALTIME_*`、`OPENAI_EMBEDDING_*`
+- 如果要让前端实时语音真正可用，除了 `OPENAI_REALTIME_BASE_URL` / `OPENAI_REALTIME_API_KEY` 外，还要确保 `OPENAI_REALTIME_CLIENT_SECRETS_PATH` 与 `OPENAI_REALTIME_CALLS_PATH` 和上游服务保持一致。
 
 #### Python AI 后端
 
@@ -313,14 +366,22 @@ OPENAI_BASE_URL=https://api.openai.com
 OPENAI_API_KEY=your_api_key_here
 OPENAI_CHAT_MODEL=gpt-5.4
 OPENAI_CHAT_COMPLETIONS_PATH=/v1/chat/completions
+OPENAI_CHAT_TIMEOUT_SECONDS=25
 EMBEDDING_PROVIDER=openai
 OPENAI_EMBEDDING_BASE_URL=https://api.openai.com
 OPENAI_EMBEDDING_API_KEY=your_embedding_api_key_here
 OPENAI_EMBEDDING_MODEL=text-embedding-3-large
-OPENAI_EMBEDDING_TIMEOUT_SECONDS=45
+OPENAI_EMBEDDING_TIMEOUT_SECONDS=20
 OLLAMA_EMBEDDING_BASE_URL=http://127.0.0.1:11434
 OLLAMA_EMBEDDING_MODEL=nomic-embed-text
 OLLAMA_EMBEDDING_TIMEOUT_SECONDS=45
+
+OPENAI_REALTIME_BASE_URL=https://api.openai.com
+OPENAI_REALTIME_API_KEY=your_realtime_api_key_here
+OPENAI_REALTIME_CLIENT_SECRETS_PATH=/v1/realtime/client_secrets
+OPENAI_REALTIME_CALLS_PATH=/v1/realtime/calls
+OPENAI_REALTIME_TRANSCRIPTION_MODEL=gpt-4o-transcribe
+OPENAI_REALTIME_LANGUAGE=zh
 
 MYSQL_DATASOURCE_URL=mysql+pymysql://root:root@127.0.0.1:3306/resume-builder
 MYSQL_DATASOURCE_USERNAME=root
@@ -347,7 +408,8 @@ AUTOGEN_ENABLED=false
 - 从 Python 配置回退逻辑看，最小必填可收敛为：`OPENAI_API_KEY`、`MYSQL_DATASOURCE_URL`、`PGVECTOR_DATASOURCE_URL`；但推荐把 `OPENAI_CHAT_MODEL`、`EMBEDDING_PROVIDER`、`OPENAI_EMBEDDING_MODEL`、`AUTOGEN_ENABLED` 也显式写出，便于排查。
 - 如果 `EMBEDDING_PROVIDER=openai`，`OPENAI_EMBEDDING_BASE_URL` / `OPENAI_EMBEDDING_API_KEY` 不配时会回退到聊天或通用 `OPENAI_*`；如果切换到 `ollama`，则需要补 `OLLAMA_EMBEDDING_*`。
 - `OPENAI_VISION_*` 用于图片 OCR，未单独配置时会回退到聊天或通用 `OPENAI_*`。
-- `OPENAI_SPEECH_*` 用于音频转写，`OPENAI_REALTIME_*` 用于实时语音；不拆分供应商时也可以直接复用 `OPENAI_API_KEY`。
+- `OPENAI_REALTIME_*` 用于实时语音；不拆分供应商时也可以直接复用 `OPENAI_BASE_URL` / `OPENAI_API_KEY`。
+- 如果要让前端实时语音真正可用，除了 `OPENAI_REALTIME_BASE_URL` / `OPENAI_REALTIME_API_KEY` 外，还要确保 `OPENAI_REALTIME_CLIENT_SECRETS_PATH` 与 `OPENAI_REALTIME_CALLS_PATH` 和上游服务保持一致。
 
 ## 知识库使用说明
 
@@ -431,7 +493,7 @@ npm run format
 ```text
 resume-builder/
   src/
-    api/                         # 前端请求封装（chat/interview/speech/realtime）
+    api/                         # 前端请求封装（chat/interview/rag/realtime）
       apiBase.ts                 # API 基础路径常量（/api）
     components/
       ai/                        # AI 配置、AI 优化、AI 面试、知识库界面
@@ -441,6 +503,7 @@ resume-builder/
       prompts/                   # AI 提示词模板
       interview/                 # 面试类型定义
       aiOptimizeBackendService.ts
+      browserSpeechService.ts
       interviewService.ts
       realtimeSpeechService.ts
     stores/
@@ -472,14 +535,15 @@ resume-builder/
 
 - `POST /chat`：普通问答
 - `POST /chat/stream`：流式问答（SSE）
-- `POST /audio/transcriptions`：音频转写
-- `POST /realtime/client-secret`：实时语音临时密钥
+- `POST /realtime/client-secret`：实时语音临时密钥，返回 `clientSecret`、`realtimeApiBaseUrl`、`realtimeCallsPath`
 - `POST /interview/turn/stream`：面试流式回合（NDJSON）
 - `GET /interview/sessions`：面试会话列表
 - `GET /interview/sessions/{sessionId}`：会话详情
 - `POST /rag/query`：RAG 检索问答
 - `POST /rag/documents`：RAG 文档入库
 - `POST /rag/upload`：知识库统一上传入口，支持 `PDF/TXT/MD/DOCX/PNG/JPG/JPEG/WEBP`
+
+当前已移除 `/audio/transcriptions`，语音输入统一走 Realtime + 浏览器回退链路。
 
 更多后端细节见：
 
