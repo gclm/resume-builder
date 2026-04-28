@@ -1,7 +1,7 @@
 <!-- author: jf -->
 # spring-ai-backend
 
-Spring Boot 3 + Spring AI 后端服务，提供聊天、流式输出、Realtime 临时密钥、AI 面试会话与 RAG 能力。
+Spring Boot 3 + Spring AI 后端服务，提供聊天、流式输出、Realtime 临时密钥、AI 面试会话、知识库统一上传、图片 OCR 与 RAG 检索能力。
 
 ## 技术栈
 
@@ -19,7 +19,7 @@ Spring Boot 3 + Spring AI 后端服务，提供聊天、流式输出、Realtime 
 - JDK `21`
 - Maven `3.9+`
 - Docker Desktop / Docker Compose
-- 可用的 OpenAI 或 OpenAI-compatible API Key
+- 可用的 OpenAI 或 OpenAI-compatible API Key；如启用默认实时语音链路，还需要 DashScope API Key
 
 ### 1. 准备 `.env`
 
@@ -51,8 +51,13 @@ docker compose up -d
 
 ```bash
 docker exec -i spring-ai-mysql mysql -uroot -proot resume-builder < ../sql/interview_schema.sql
-docker exec -i spring-ai-pgvector psql -U postgres -d resume_builder_vector < ../sql/pgvector_rag_schema.sql
 ```
+
+说明：
+
+- MySQL 面试会话表仍需要开发者手工执行 `../sql/interview_schema.sql`。
+- Spring 后端禁止自动建表，启动前必须手工执行 `../sql/pgvector_rag_schema.sql` 创建 `rag_document_chunks`。
+- 如果数据库里已有 `rag_vector_store_qwen3_embedding_0_6b` 或旧结构 `rag_document_chunks`，且可以丢弃现有 RAG 向量数据，可先手工执行 `../sql/spring_ai_rag_table_cleanup.sql`，再执行 `../sql/pgvector_rag_schema.sql`，最后重启 Spring 后端。
 
 ### 4. 启动后端
 
@@ -85,13 +90,21 @@ APP_CORS_ALLOWED_ORIGINS=http://localhost:5173
 ### 可选分路配置
 
 - Chat：`OPENAI_CHAT_BASE_URL`、`OPENAI_CHAT_API_KEY`、`OPENAI_CHAT_MODEL`
-- Realtime：`OPENAI_REALTIME_BASE_URL`、`OPENAI_REALTIME_API_KEY`、`OPENAI_REALTIME_TRANSCRIPTION_MODEL`
-- Embedding：`OPENAI_EMBEDDING_BASE_URL`、`OPENAI_EMBEDDING_API_KEY`、`OPENAI_EMBEDDING_MODEL`
+- Realtime ASR：默认 `REALTIME_ASR_PROVIDER=dashscope`，使用 `DASHSCOPE_API_KEY`、`DASHSCOPE_REALTIME_BASE_URL`、`DASHSCOPE_REALTIME_MODEL`、`DASHSCOPE_REALTIME_LANGUAGE`、`DASHSCOPE_REALTIME_SAMPLE_RATE`、`DASHSCOPE_REALTIME_VAD_THRESHOLD`、`DASHSCOPE_REALTIME_VAD_SILENCE_DURATION_MS`、`DASHSCOPE_REALTIME_OPEN_TIMEOUT_SECONDS`
+- OpenAI Realtime：当 `REALTIME_ASR_PROVIDER=openai` 时，使用 `OPENAI_REALTIME_BASE_URL`、`OPENAI_REALTIME_API_KEY`、`OPENAI_REALTIME_CLIENT_SECRETS_PATH`、`OPENAI_REALTIME_CALLS_PATH`、`OPENAI_REALTIME_TRANSCRIPTION_MODEL`、`OPENAI_REALTIME_LANGUAGE`、`OPENAI_REALTIME_TIMEOUT_SECONDS`
+- Embedding：`EMBEDDING_PROVIDER`、`EMBEDDING_DIMENSIONS`、`OPENAI_EMBEDDING_*`、`OLLAMA_EMBEDDING_*`
+- Vision OCR：`OPENAI_VISION_BASE_URL`、`OPENAI_VISION_API_KEY`、`OPENAI_VISION_MODEL`、`OPENAI_VISION_DETAIL`
 
 说明：
 
-- 保留默认路径时，`*_BASE_URL` 不要再追加 `/v1`。
-- `.env` 通过 `spring.config.import=optional:file:.env[.properties]` 自动加载。
+- `*_BASE_URL` 可以按 Python 后端习惯保留到服务根地址，也可以带 `/v1`；Spring RestClient 会在默认 `*_PATH=/v1/...` 场景下自动去重，避免请求到重复 `/v1/v1/...`。
+- 默认实时语音对齐 DashScope realtime ASR：前端先请求 `POST /api/ai/realtime/client-secret`，收到 `provider=dashscope` 后连接后端 `/ws/ai/realtime-asr`，Spring 后端再使用 `DASHSCOPE_API_KEY` 桥接到 DashScope。
+- `DASHSCOPE_REALTIME_MODEL` 默认 `qwen3-asr-flash-realtime`，音频格式为 `pcm`，默认采样率 `16000`，默认语言 `zh`，默认 VAD 为 `threshold=0.2`、`silence_duration_ms=800`。
+- `OPENAI_REALTIME_TIMEOUT_SECONDS` 默认 `120`，仅在 `REALTIME_ASR_PROVIDER=openai` 时用于创建 OpenAI Realtime 临时密钥的上游 HTTP 请求超时。
+- `EMBEDDING_PROVIDER=openai` 时，知识库向量化使用 `OPENAI_EMBEDDING_BASE_URL`、`OPENAI_EMBEDDING_API_KEY`、`OPENAI_EMBEDDING_MODEL`。
+- `EMBEDDING_PROVIDER=ollama` 时，知识库向量化使用本地 `OLLAMA_EMBEDDING_BASE_URL`、`OLLAMA_EMBEDDING_MODEL`、`OLLAMA_EMBEDDING_TIMEOUT_SECONDS`；启动前需先执行 `ollama pull <模型名>`。
+- `EMBEDDING_DIMENSIONS=0` 时会按常见模型自动推断维度；自定义 Ollama embedding 模型时应填写真实维度，避免向量检索链路出现维度不一致。
+- `.env` 会通过 `spring.config.import` 自动加载，并兼容从 `spring-ai-backend/` 目录、仓库根目录或 IDE 工作目录启动。
 
 ## 与前端联调
 
@@ -104,21 +117,24 @@ APP_CORS_ALLOWED_ORIGINS=http://localhost:5173
 - `POST /chat`
 - `POST /chat/stream`
 - `POST /realtime/client-secret`
+- `WS /ws/ai/realtime-asr`（`REALTIME_ASR_PROVIDER=dashscope` 时由前端连接，用于桥接 DashScope realtime ASR）
 - `POST /interview/turn/stream`
 - `GET /interview/sessions?limit=20`
 - `GET /interview/sessions/{sessionId}`
 - `POST /rag/documents`
 - `POST /rag/query`
+- `POST /rag/upload`
 
 ## 建表脚本
 
 - `sql/interview_schema.sql`
 - `sql/pgvector_rag_schema.sql`
+- `sql/spring_ai_rag_table_cleanup.sql`
 
 说明：
 
-- 两份脚本都需要开发者手工执行一次。
-- 应用启动时不会自动执行建表 SQL。
+- `interview_schema.sql` 需要开发者手工执行一次，Spring 后端不会自动创建 MySQL 会话表。
+- Spring 后端不会自动创建 `rag_document_chunks`；`spring_ai_rag_table_cleanup.sql` 用于手工删除误建的 `rag_vector_store_*` 表和旧结构 `rag_document_chunks`，删除后必须重新手工执行 `pgvector_rag_schema.sql`。
 
 ## 常见问题
 

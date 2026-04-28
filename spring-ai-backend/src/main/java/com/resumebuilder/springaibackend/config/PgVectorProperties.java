@@ -1,3 +1,4 @@
+// author: jf
 package com.resumebuilder.springaibackend.config;
 
 import org.springframework.boot.context.properties.ConfigurationProperties;
@@ -9,6 +10,7 @@ public class PgVectorProperties {
     private String username = "pgvector";
     private String password = "pgvector";
     private String driverClassName = "org.postgresql.Driver";
+    private int connectTimeoutSeconds = 8;
 
     public String getUrl() {
         return url;
@@ -40,5 +42,13 @@ public class PgVectorProperties {
 
     public void setDriverClassName(String driverClassName) {
         this.driverClassName = driverClassName;
+    }
+
+    public int getConnectTimeoutSeconds() {
+        return connectTimeoutSeconds;
+    }
+
+    public void setConnectTimeoutSeconds(int connectTimeoutSeconds) {
+        this.connectTimeoutSeconds = connectTimeoutSeconds;
     }
 }

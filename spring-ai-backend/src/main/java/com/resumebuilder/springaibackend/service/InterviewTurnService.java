@@ -1,7 +1,10 @@
+// author: jf
 package com.resumebuilder.springaibackend.service;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.resumebuilder.springaibackend.config.AppProperties;
+import com.resumebuilder.springaibackend.dto.RagSource;
 import com.resumebuilder.springaibackend.dto.InterviewStreamEvent;
 import com.resumebuilder.springaibackend.dto.InterviewTurnRequest;
 import com.resumebuilder.springaibackend.dto.InterviewTurnRequest.InterviewHistoryItem;
@@ -12,6 +15,10 @@ import com.resumebuilder.springaibackend.dto.InterviewTurnResponse.InterviewTurn
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
+import java.util.concurrent.ExecutionException;
+import java.util.concurrent.Future;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.TimeoutException;
 import java.util.UUID;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
@@ -21,14 +28,20 @@ import org.springframework.ai.chat.messages.Message;
 import org.springframework.ai.chat.messages.SystemMessage;
 import org.springframework.ai.chat.messages.UserMessage;
 import org.springframework.ai.chat.prompt.Prompt;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Qualifier;
+import org.springframework.scheduling.concurrent.ThreadPoolTaskExecutor;
 import org.springframework.stereotype.Service;
+import org.springframework.util.StringUtils;
 import reactor.core.Disposable;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Sinks;
 
-// author: jf
 @Service
 public class InterviewTurnService {
+
+    private static final Logger log = LoggerFactory.getLogger(InterviewTurnService.class);
 
     private static final String CANDIDATE_SYSTEM_PROMPT = """
             你是一名专业、严格、但表达友善的技术面试官。
@@ -64,15 +77,24 @@ public class InterviewTurnService {
     private final ChatClient chatClient;
     private final ObjectMapper objectMapper;
     private final InterviewSessionStoreService interviewSessionStoreService;
+    private final RagService ragService;
+    private final AppProperties appProperties;
+    private final ThreadPoolTaskExecutor interviewRagTaskExecutor;
 
     public InterviewTurnService(
             ChatClient chatClient,
             ObjectMapper objectMapper,
-            InterviewSessionStoreService interviewSessionStoreService
+            InterviewSessionStoreService interviewSessionStoreService,
+            RagService ragService,
+            AppProperties appProperties,
+            @Qualifier("interviewRagTaskExecutor") ThreadPoolTaskExecutor interviewRagTaskExecutor
     ) {
         this.chatClient = chatClient;
         this.objectMapper = objectMapper;
         this.interviewSessionStoreService = interviewSessionStoreService;
+        this.ragService = ragService;
+        this.appProperties = appProperties;
+        this.interviewRagTaskExecutor = interviewRagTaskExecutor;
     }
 
     public Flux<InterviewStreamEvent> handleStream(InterviewTurnRequest request) {
@@ -80,8 +102,9 @@ public class InterviewTurnService {
         StringBuilder rawBuilder = new StringBuilder();
         StringBuilder lastAssistantReply = new StringBuilder();
         String sessionId = resolveSessionId(request);
+        String ragContext = resolveInterviewRagContext(request);
 
-        Disposable disposable = chatClient.prompt(new Prompt(buildMessages(request))).stream().content()
+        Disposable disposable = chatClient.prompt(new Prompt(buildMessages(request, ragContext))).stream().content()
                 .subscribe(
                         chunk -> {
                             if (chunk == null || chunk.isEmpty()) {
@@ -122,7 +145,7 @@ public class InterviewTurnService {
         return sink.asFlux().doOnCancel(disposable::dispose);
     }
 
-    private List<Message> buildMessages(InterviewTurnRequest request) {
+    private List<Message> buildMessages(InterviewTurnRequest request, String ragContext) {
         String mode = normalizeMode(request.mode());
         String command = normalizeCommand(request.command());
 
@@ -148,7 +171,7 @@ public class InterviewTurnService {
             }
         }
 
-        messages.add(new UserMessage(buildUserPrompt(request, mode, command)));
+        messages.add(new UserMessage(buildUserPrompt(request, mode, command, ragContext)));
         return messages;
     }
 
@@ -186,7 +209,7 @@ public class InterviewTurnService {
         return CANDIDATE_SYSTEM_PROMPT;
     }
 
-    private String buildUserPrompt(InterviewTurnRequest request, String mode, String command) {
+    private String buildUserPrompt(InterviewTurnRequest request, String mode, String command, String ragContext) {
         int durationMinutes = request.durationMinutes() == null || request.durationMinutes() <= 0 ? 60 : request.durationMinutes();
         int elapsedSeconds = request.elapsedSeconds() == null || request.elapsedSeconds() < 0 ? 0 : request.elapsedSeconds();
         int elapsedMin = elapsedSeconds / 60;
@@ -203,7 +226,7 @@ public class InterviewTurnService {
             commandLine = "本轮用户输入：" + (safeText(request.userInput()).isBlank() ? "（空）" : safeText(request.userInput()));
         }
 
-        return String.join("\n",
+        List<String> sections = new ArrayList<>(List.of(
                 "角色关系：" + ("candidate".equals(mode) ? "你是面试官" : "你是候选人"),
                 "目标时长：" + durationMinutes + " 分钟，已用：" + elapsedMin + " 分钟，剩余：" + remainMin + " 分钟。",
                 "命令：" + command,
@@ -218,7 +241,98 @@ public class InterviewTurnService {
                 buildResumeDigest(request.resumeSnapshot()),
                 "",
                 "请仅输出一个 JSON 对象。"
-        );
+        ));
+
+        if (StringUtils.hasText(ragContext)) {
+            sections.add("");
+            sections.add("知识库参考资料（仅在与简历和当前轮次相关时使用，不可编造）：");
+            sections.add(ragContext);
+        }
+        return String.join("\n", sections);
+    }
+
+    private String resolveInterviewRagContext(InterviewTurnRequest request) {
+        String retrievalQuery = buildInterviewRetrievalQuery(request);
+        if (!StringUtils.hasText(retrievalQuery)) {
+            return "";
+        }
+
+        double timeoutSeconds = Math.max(0.2D, appProperties.getInterviewRagTimeoutSeconds());
+        int timeoutMillis = (int) Math.ceil(timeoutSeconds * 1000D);
+        Future<List<RagSource>> future = null;
+        try {
+            future = interviewRagTaskExecutor.submit(
+                    () -> ragService.searchSources(retrievalQuery, Math.max(1, appProperties.getInterviewRagTopK()))
+            );
+            List<RagSource> sources = filterSourcesBySimilarity(future.get(timeoutMillis, TimeUnit.MILLISECONDS));
+            if (sources.isEmpty()) {
+                return "";
+            }
+            return ragService.buildContext(sources);
+        } catch (TimeoutException ex) {
+            cancelFuture(future);
+            log.warn("AI面试 RAG 检索超时，已取消后台任务并降级为无知识库上下文: {}", ex.getMessage());
+            return "";
+        } catch (InterruptedException ex) {
+            cancelFuture(future);
+            Thread.currentThread().interrupt();
+            log.warn("AI面试 RAG 检索被中断，已取消后台任务并降级为无知识库上下文: {}", ex.getMessage());
+            return "";
+        } catch (ExecutionException ex) {
+            log.warn("AI面试 RAG 检索失败，已降级为无知识库上下文: {}", ex.getCause() == null ? ex.getMessage() : ex.getCause().getMessage());
+            return "";
+        } catch (RuntimeException ex) {
+            cancelFuture(future);
+            log.warn("AI面试 RAG 检索失败，已降级为无知识库上下文: {}", ex.getMessage());
+            return "";
+        }
+    }
+
+    private void cancelFuture(Future<?> future) {
+        if (future != null && !future.isDone()) {
+            future.cancel(true);
+        }
+    }
+
+    private String buildInterviewRetrievalQuery(InterviewTurnRequest request) {
+        String mode = normalizeMode(request.mode());
+        String command = normalizeCommand(request.command());
+        String userInput = safeText(request.userInput());
+        String resumeDigest = buildResumeDigest(request.resumeSnapshot());
+        return String.join("\n",
+                "面试模式：" + mode,
+                "面试命令：" + command,
+                "用户输入：" + (userInput.isBlank() ? "（空）" : userInput),
+                "简历摘要：",
+                resumeDigest
+        ).trim();
+    }
+
+    private List<RagSource> filterSourcesBySimilarity(List<RagSource> sources) {
+        List<RagSource> safeSources = sources == null ? List.of() : sources;
+        double threshold = Math.max(0D, appProperties.getInterviewRagSimilarityThreshold());
+        if (threshold <= 0D) {
+            return safeSources;
+        }
+        return safeSources.stream()
+                .filter(source -> extractSimilarity(source) >= threshold)
+                .limit(Math.max(1, appProperties.getInterviewRagTopK()))
+                .toList();
+    }
+
+    private double extractSimilarity(RagSource source) {
+        if (source == null || source.metadata() == null) {
+            return 0D;
+        }
+        Object value = source.metadata().get("similarity");
+        if (value instanceof Number number) {
+            return number.doubleValue();
+        }
+        try {
+            return Double.parseDouble(String.valueOf(value));
+        } catch (NumberFormatException ex) {
+            return 0D;
+        }
     }
 
     private String buildResumeDigest(ResumeSnapshot snapshot) {

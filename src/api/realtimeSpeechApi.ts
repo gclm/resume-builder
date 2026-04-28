@@ -7,11 +7,15 @@ export interface RealtimeClientSecretRequest {
 }
 
 export interface RealtimeClientSecretResponse {
-  clientSecret: string
+  clientSecret?: string
   expiresAt?: number | null
+  provider?: 'openai' | 'dashscope'
   model?: string
-  realtimeApiBaseUrl: string
+  language?: string
+  realtimeApiBaseUrl?: string
   realtimeCallsPath?: string
+  websocketPath?: string
+  sampleRate?: number | null
 }
 
 export function getRealtimeClientSecretEndpoint(): string {

@@ -1,3 +1,4 @@
+// author: jf
 package com.resumebuilder.springaibackend.exception;
 
 import java.util.ArrayList;
@@ -21,7 +22,7 @@ public class ApiExceptionHandler {
 
     @ExceptionHandler({MethodArgumentNotValidException.class, BindException.class})
     public ResponseEntity<Map<String, Object>> handleValidation(Exception ex) {
-        String message = "Invalid request";
+        String message = "请求参数不合法";
 
         if (ex instanceof MethodArgumentNotValidException methodEx && !methodEx.getBindingResult().getFieldErrors().isEmpty()) {
             var fieldError = methodEx.getBindingResult().getFieldErrors().getFirst();
@@ -46,9 +47,18 @@ public class ApiExceptionHandler {
         payload.put("message", safeStatusMessage(ex));
         return ResponseEntity.status(ex.getStatusCode()).body(payload);
     }
+
+    @ExceptionHandler(IllegalArgumentException.class)
+    public ResponseEntity<Map<String, Object>> handleBadRequest(IllegalArgumentException ex) {
+        Map<String, Object> payload = new LinkedHashMap<>();
+        payload.put("error", "bad_request");
+        payload.put("message", ex.getMessage() == null ? "请求参数不合法" : ex.getMessage().trim());
+        return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(payload);
+    }
+
     @ExceptionHandler(Exception.class)
     public ResponseEntity<Map<String, Object>> handleUnexpected(Exception ex) {
-        log.error("Unhandled exception", ex);
+        log.error("未处理的服务异常", ex);
 
         Map<String, Object> payload = new LinkedHashMap<>();
         payload.put("error", "internal_error");
@@ -66,7 +76,7 @@ public class ApiExceptionHandler {
     }
     private String buildDetailedMessage(Throwable ex) {
         if (ex == null) {
-            return "Unexpected server error";
+            return "未知服务异常";
         }
 
         List<String> causes = new ArrayList<>();
@@ -88,4 +98,3 @@ public class ApiExceptionHandler {
         return String.join(" | caused by -> ", causes);
     }
 }
-

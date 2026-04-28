@@ -1,26 +1,53 @@
 -- author: jf
--- 手工执行：用于知识库 chunk 与向量存储。
--- 当前 Python 后端已经改成真实写入 PostgreSQL + pgvector。
--- 这里将 embedding 列定义为不固定维度的 vector，
--- 以兼容 text-embedding-3-small(1536) 与 text-embedding-3-large(3072)。
--- 默认检索走精确 cosine search；如后续固定到单一模型，可再按模型维度补 ANN 索引。
+-- 手工执行：用于创建 Spring AI 与 Python 后端共用的 rag_document_chunks 向量表。
+-- 后端禁止自动建表；Spring AI 后端的 PgVectorStore.initializeSchema(false) 只负责读写已存在的表。
+-- 本脚本只创建 rag_document_chunks，不创建模型专属 rag_vector_store_* 表。
+
 CREATE EXTENSION IF NOT EXISTS vector;
+CREATE EXTENSION IF NOT EXISTS pgcrypto;
 
 CREATE TABLE IF NOT EXISTS rag_document_chunks (
-    id BIGSERIAL PRIMARY KEY,
-    source_id VARCHAR(255) NOT NULL,
-    chunk_index INTEGER NOT NULL,
-    original_filename VARCHAR(255) NOT NULL,
-    original_content_type VARCHAR(255) NOT NULL,
-    source_type VARCHAR(32) NOT NULL,
-    ingest_source VARCHAR(64) NOT NULL,
+    id TEXT PRIMARY KEY DEFAULT gen_random_uuid()::text,
     content TEXT NOT NULL,
     metadata JSONB NOT NULL DEFAULT '{}'::jsonb,
+    embedding vector NOT NULL,
+    source_id VARCHAR(255) NOT NULL DEFAULT '',
+    chunk_index INTEGER NOT NULL DEFAULT 0,
+    original_filename VARCHAR(255) NOT NULL DEFAULT '',
+    original_content_type VARCHAR(255) NOT NULL DEFAULT '',
+    source_type VARCHAR(32) NOT NULL DEFAULT '',
+    ingest_source VARCHAR(64) NOT NULL DEFAULT '',
     embedding_model VARCHAR(128) NOT NULL DEFAULT '',
     embedding_dimensions INTEGER NOT NULL DEFAULT 0,
-    embedding vector NOT NULL,
     created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
+
+ALTER TABLE rag_document_chunks
+    ADD COLUMN IF NOT EXISTS content TEXT;
+
+ALTER TABLE rag_document_chunks
+    ADD COLUMN IF NOT EXISTS metadata JSONB NOT NULL DEFAULT '{}'::jsonb;
+
+ALTER TABLE rag_document_chunks
+    ADD COLUMN IF NOT EXISTS embedding vector;
+
+ALTER TABLE rag_document_chunks
+    ADD COLUMN IF NOT EXISTS source_id VARCHAR(255) NOT NULL DEFAULT '';
+
+ALTER TABLE rag_document_chunks
+    ADD COLUMN IF NOT EXISTS chunk_index INTEGER NOT NULL DEFAULT 0;
+
+ALTER TABLE rag_document_chunks
+    ADD COLUMN IF NOT EXISTS original_filename VARCHAR(255) NOT NULL DEFAULT '';
+
+ALTER TABLE rag_document_chunks
+    ADD COLUMN IF NOT EXISTS original_content_type VARCHAR(255) NOT NULL DEFAULT '';
+
+ALTER TABLE rag_document_chunks
+    ADD COLUMN IF NOT EXISTS source_type VARCHAR(32) NOT NULL DEFAULT '';
+
+ALTER TABLE rag_document_chunks
+    ADD COLUMN IF NOT EXISTS ingest_source VARCHAR(64) NOT NULL DEFAULT '';
 
 ALTER TABLE rag_document_chunks
     ADD COLUMN IF NOT EXISTS embedding_model VARCHAR(128) NOT NULL DEFAULT '';
@@ -29,22 +56,85 @@ ALTER TABLE rag_document_chunks
     ADD COLUMN IF NOT EXISTS embedding_dimensions INTEGER NOT NULL DEFAULT 0;
 
 ALTER TABLE rag_document_chunks
+    ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP;
+
+ALTER TABLE rag_document_chunks
+    ALTER COLUMN id DROP DEFAULT;
+
+ALTER TABLE rag_document_chunks
+    ALTER COLUMN id TYPE TEXT
+    USING id::text;
+
+ALTER TABLE rag_document_chunks
+    ALTER COLUMN id SET DEFAULT gen_random_uuid()::text;
+
+ALTER TABLE rag_document_chunks
+    ALTER COLUMN metadata TYPE JSONB
+    USING COALESCE(metadata::jsonb, '{}'::jsonb);
+
+ALTER TABLE rag_document_chunks
+    ALTER COLUMN metadata SET DEFAULT '{}'::jsonb;
+
+ALTER TABLE rag_document_chunks
     ALTER COLUMN embedding TYPE vector
     USING embedding::vector;
 
 UPDATE rag_document_chunks
-SET embedding_model = 'text-embedding-3-small'
-WHERE COALESCE(embedding_model, '') = '';
+SET source_id = ''
+WHERE source_id IS NULL;
+
+UPDATE rag_document_chunks
+SET chunk_index = 0
+WHERE chunk_index IS NULL;
+
+UPDATE rag_document_chunks
+SET original_filename = ''
+WHERE original_filename IS NULL;
+
+UPDATE rag_document_chunks
+SET original_content_type = ''
+WHERE original_content_type IS NULL;
+
+UPDATE rag_document_chunks
+SET source_type = ''
+WHERE source_type IS NULL;
+
+UPDATE rag_document_chunks
+SET ingest_source = ''
+WHERE ingest_source IS NULL;
+
+UPDATE rag_document_chunks
+SET embedding_model = ''
+WHERE embedding_model IS NULL;
 
 UPDATE rag_document_chunks
 SET embedding_dimensions = vector_dims(embedding)
-WHERE COALESCE(embedding_dimensions, 0) <= 0;
+WHERE embedding IS NOT NULL
+  AND COALESCE(embedding_dimensions, 0) <= 0;
 
 ALTER TABLE rag_document_chunks
-    ALTER COLUMN embedding_model DROP DEFAULT;
+    ALTER COLUMN source_id SET DEFAULT '';
 
 ALTER TABLE rag_document_chunks
-    ALTER COLUMN embedding_dimensions DROP DEFAULT;
+    ALTER COLUMN chunk_index SET DEFAULT 0;
+
+ALTER TABLE rag_document_chunks
+    ALTER COLUMN original_filename SET DEFAULT '';
+
+ALTER TABLE rag_document_chunks
+    ALTER COLUMN original_content_type SET DEFAULT '';
+
+ALTER TABLE rag_document_chunks
+    ALTER COLUMN source_type SET DEFAULT '';
+
+ALTER TABLE rag_document_chunks
+    ALTER COLUMN ingest_source SET DEFAULT '';
+
+ALTER TABLE rag_document_chunks
+    ALTER COLUMN embedding_model SET DEFAULT '';
+
+ALTER TABLE rag_document_chunks
+    ALTER COLUMN embedding_dimensions SET DEFAULT 0;
 
 CREATE INDEX IF NOT EXISTS idx_rag_document_chunks_source_id
     ON rag_document_chunks (source_id);

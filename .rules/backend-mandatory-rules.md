@@ -71,14 +71,16 @@
 
 1. 后端分层必须优先遵守现有项目结构。
 2. 禁止在已有分层之外，随意在外层新增新的平级目录。
-3. 如需扩展，优先在现有层内新增子包或子目录。
+3. 如需扩展，优先在现有层内新增子包或子目录；Spring AI 后端如需承接非业务编排支撑类，必须使用专项规则中列明的外层职责目录。
 4. 无规则支撑时，不得新增语义模糊或破坏分层的目录。
+5. 禁止使用 `common`、`utils`、`helper`、`manager`、`misc` 等大杂烩目录承接职责不清的后端文件。
 
 ### 4.3 功能归属约束
 
 1. 禁止在非该功能目录下新增非对应功能的文件。
 2. 聊天、面试、RAG、音频、Realtime、简历优化等能力，应各自落在对应功能目录和分层中。
 3. 公共能力仅在确实跨模块复用时才能抽取，禁止借“公共封装”名义制造大杂烩目录。
+4. Spring AI 后端 `service/` 目录只能放真正 `@Service` 业务编排类；非 `@Service` 文件必须按职责放到专项规则列明的外层目录。
 
 ---
 
@@ -110,14 +112,24 @@
 3. 每次生成或修改 Spring AI 后端代码后，必须对照《阿里巴巴 Java 开发手册》进行自检。
 4. 如发现不符合项，应先修正再交付。
 
+### 6.3 Spring AI Service 目录强制边界
+
+1. `spring-ai-backend/src/main/java/com/resumebuilder/springaibackend/service/` 只允许存放真正带 `@Service` 注解、且承担业务用例或流程编排职责的类。
+2. 没有 `@Service` 注解的 Java 文件一律不得放入 `service/`。
+3. `@Service` 不是放入 `service/` 的充分条件；如果主要职责是 SDK client、HTTP client support、provider adapter、VectorStore 适配、pgvector repository、Embedding provider、OCR 实现、WebSocket handler、parser、chunker、support/helper，则必须放入对应外层职责目录。
+4. Spring AI 后端允许使用的非业务编排外层职责目录，以 `.rules/spring-ai-backend-mandatory-rules.md` 为准，当前包括 `client/`、`vector/`、`embedding/`、`ocr/`、`realtime/`、`parser/`、`chunking/`。
+5. 禁止为了把支撑类留在 `service/` 中而随意添加 `@Service` 注解。
+
 ---
 
 ## 7. 数据库与 SQL 强制约束
 
-1. 业务 SQL（Mapper 自定义 SQL）必须写在 `mapper.xml` 文件中，不允许直接写在 Mapper 接口注解里，例如 `@Select`、`@Update`、`@Insert`、`@Delete`。
-2. 建表、索引、初始化等一次性 SQL（非项目运行期业务逻辑）必须写入固定 SQL 目录下的独立 `.sql` 文件。
-3. 固定 SQL 目录为：`spring-ai-backend/sql/`。
-4. 禁止在应用启动流程中自动执行上述一次性 SQL，由开发者手工执行。
+1. 后端运行代码中禁止写死 PostgreSQL、MySQL 或其他数据库 SQL 字符串，包括 `SELECT`、`INSERT`、`UPDATE`、`DELETE`、`CREATE`、`ALTER`、`DROP`、索引初始化等语句。
+2. MySQL 如确需自定义业务 SQL，必须写在 `mapper.xml` 文件中，不允许直接写在 Mapper 接口注解里，例如 `@Select`、`@Update`、`@Insert`、`@Delete`，也不允许写在 Controller、Service、Config 或其他 Java 代码中。
+3. Spring AI 后端 Java `mapper/` 目录只允许存放带 `@Mapper` 的 Mapper 接口；MyBatis 查询投影、结果行对象、Row/Projection 类必须放入 `entity/`，对外 API 模型才放入 `dto/`。
+4. PostgreSQL + pgvector 向量库存储与相似度检索必须优先使用 Spring AI `VectorStore` / `PgVectorStore` 提供的 `add`、`similaritySearch` 等能力，禁止在后端代码中手写 pgvector 插入、检索或建表 SQL。
+5. 建表、索引、初始化等一次性 SQL（非项目运行期业务逻辑）必须写入固定 SQL 目录下的独立 `.sql` 文件，固定 SQL 目录为：`sql/`。
+6. 禁止在应用启动流程中执行项目自写的一次性 SQL，也禁止 Spring AI `PgVectorStore` 自动建表；pgvector 表必须由开发者手工执行 `sql/pgvector_rag_schema.sql` 创建，Spring AI 后端必须保持 `initializeSchema(false)`。
 
 ---
 
@@ -125,7 +137,8 @@
 
 1. AI 面试会话存储数据库固定为 MySQL。
 2. PostgreSQL 仅用于向量存储（pgvector）相关能力，不用于会话表存储。
-3. 会话建表脚本仅保留一份：`spring-ai-backend/sql/interview_schema.sql`。
+3. 会话建表脚本仅保留一份：`sql/interview_schema.sql`。
+4. MySQL 面试会话表和 pgvector RAG 向量表都禁止应用启动自动建表，仍由开发者手工执行 `sql/interview_schema.sql` 与 `sql/pgvector_rag_schema.sql`。
 
 ---
 

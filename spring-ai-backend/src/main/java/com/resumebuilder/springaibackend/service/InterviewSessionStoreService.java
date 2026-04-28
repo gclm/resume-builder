@@ -1,6 +1,6 @@
+// author: jf
 package com.resumebuilder.springaibackend.service;
 
-import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.core.toolkit.Wrappers;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.resumebuilder.springaibackend.dto.InterviewSessionDetailResponse;
@@ -14,6 +14,7 @@ import com.resumebuilder.springaibackend.dto.InterviewTurnResponse.FinalEvaluati
 import com.resumebuilder.springaibackend.dto.InterviewTurnResponse.InterviewTurnScore;
 import com.resumebuilder.springaibackend.entity.InterviewSessionEntity;
 import com.resumebuilder.springaibackend.entity.InterviewSessionMessageEntity;
+import com.resumebuilder.springaibackend.entity.InterviewSessionSummaryRow;
 import com.resumebuilder.springaibackend.mapper.InterviewSessionMapper;
 import com.resumebuilder.springaibackend.mapper.InterviewSessionMessageMapper;
 import java.time.LocalDateTime;
@@ -97,26 +98,10 @@ public class InterviewSessionStoreService {
     public List<InterviewSessionSummaryResponse> listSessions(int limit) {
         int safeLimit = Math.max(1, Math.min(limit, 100));
 
-        LambdaQueryWrapper<InterviewSessionEntity> sessionQuery = Wrappers.lambdaQuery(InterviewSessionEntity.class)
-                .orderByDesc(InterviewSessionEntity::getUpdatedAt)
-                .last("LIMIT " + safeLimit);
-
-        List<InterviewSessionEntity> sessions = sessionMapper.selectList(sessionQuery);
+        List<InterviewSessionSummaryRow> sessions = sessionMapper.selectSessionSummaries(safeLimit);
         List<InterviewSessionSummaryResponse> result = new ArrayList<>(sessions.size());
 
-        for (InterviewSessionEntity session : sessions) {
-            Long messageCount = messageMapper.selectCount(
-                    Wrappers.lambdaQuery(InterviewSessionMessageEntity.class)
-                            .eq(InterviewSessionMessageEntity::getSessionId, session.getSessionId())
-            );
-
-            InterviewSessionMessageEntity lastMessage = messageMapper.selectOne(
-                    Wrappers.lambdaQuery(InterviewSessionMessageEntity.class)
-                            .eq(InterviewSessionMessageEntity::getSessionId, session.getSessionId())
-                            .orderByDesc(InterviewSessionMessageEntity::getSeqNo)
-                            .last("LIMIT 1")
-            );
-
+        for (InterviewSessionSummaryRow session : sessions) {
             Boolean passed = session.getPassed() == null ? null : session.getPassed() == 1;
             result.add(new InterviewSessionSummaryResponse(
                     session.getSessionId(),
@@ -124,10 +109,10 @@ public class InterviewSessionStoreService {
                     safeText(session.getStatus()),
                     session.getDurationMinutes() == null ? DEFAULT_DURATION_MINUTES : session.getDurationMinutes(),
                     session.getElapsedSeconds() == null ? 0 : session.getElapsedSeconds(),
-                    messageCount == null ? 0 : messageCount.intValue(),
+                    toSafeInt(session.getMessageCount()),
                     session.getTotalScore(),
                     passed,
-                    truncateText(lastMessage == null ? "" : safeText(lastMessage.getContent()), 80),
+                    truncateText(safeText(session.getLastMessageContent()), 80),
                     session.getCreatedAt(),
                     session.getUpdatedAt()
             ));
@@ -138,12 +123,12 @@ public class InterviewSessionStoreService {
     public InterviewSessionDetailResponse getSessionDetail(String sessionId) {
         String safeSessionId = safeText(sessionId);
         if (safeSessionId.isBlank()) {
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "sessionId cannot be empty");
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "sessionId 不能为空");
         }
 
         InterviewSessionEntity session = sessionMapper.selectById(safeSessionId);
         if (session == null) {
-            throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Interview session not found");
+            throw new ResponseStatusException(HttpStatus.NOT_FOUND, "未找到面试会话");
         }
 
         List<InterviewSessionMessageEntity> messageEntities = messageMapper.selectList(
@@ -257,6 +242,13 @@ public class InterviewSessionStoreService {
             return 0;
         }
         return Math.max(0, Math.min(100, value));
+    }
+
+    private int toSafeInt(Long value) {
+        if (value == null || value <= 0) {
+            return 0;
+        }
+        return value > Integer.MAX_VALUE ? Integer.MAX_VALUE : value.intValue();
     }
 
     private String normalizeMemorySummary(String text) {

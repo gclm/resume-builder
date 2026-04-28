@@ -24,16 +24,19 @@
 
 ## 数据库与 Mapper SQL 约束（强制）
 
-1. 业务 SQL（Mapper 自定义 SQL）必须写在 `mapper.xml` 文件中，不允许直接写在 Mapper 接口注解里（如 `@Select`、`@Update`、`@Insert`、`@Delete`）。
-2. 建表、索引、初始化等一次性 SQL（非项目运行期业务逻辑）必须写入固定 SQL 目录下的独立 `.sql` 文件。
-3. 固定 SQL 目录为：`sql/`。
-4. 禁止在应用启动流程中自动执行上述一次性 SQL，由开发者手工执行。
+1. 后端运行代码中禁止写死 PostgreSQL、MySQL 或其他数据库 SQL 字符串，包括 `SELECT`、`INSERT`、`UPDATE`、`DELETE`、`CREATE`、`ALTER`、`DROP`、索引初始化等语句。
+2. MySQL 如确需自定义业务 SQL，必须写在 `mapper.xml` 文件中，不允许直接写在 Mapper 接口注解里（如 `@Select`、`@Update`、`@Insert`、`@Delete`），也不允许写在 Controller、Service、Config 或其他 Java 代码中。
+3. Spring AI 后端 Java `mapper/` 目录只允许存放带 `@Mapper` 的 Mapper 接口；MyBatis 查询投影、结果行对象、Row/Projection 类必须放入 `entity/`，对外 API 模型才放入 `dto/`。
+4. PostgreSQL + pgvector 向量库存储与相似度检索必须优先使用 Spring AI `VectorStore` / `PgVectorStore` 提供的 `add`、`similaritySearch` 等能力，禁止在后端代码中手写 pgvector 插入、检索或建表 SQL。
+5. 建表、索引、初始化等一次性 SQL（非项目运行期业务逻辑）必须写入固定 SQL 目录下的独立 `.sql` 文件，固定 SQL 目录为：`sql/`。
+6. 禁止在应用启动流程中执行项目自写的一次性 SQL，也禁止 Spring AI `PgVectorStore` 自动建表；pgvector 表必须由开发者手工执行 `sql/pgvector_rag_schema.sql` 创建，Spring AI 后端必须保持 `initializeSchema(false)`。
 
 ## 会话存储数据库约束（强制）
 
 1. AI 面试会话存储数据库固定为 MySQL。
 2. PostgreSQL 仅用于向量存储（pgvector）相关能力，不用于会话表存储。
 3. 会话建表脚本仅保留一份：`sql/interview_schema.sql`。
+4. MySQL 面试会话表和 pgvector RAG 向量表都禁止应用启动自动建表，仍由开发者手工执行 `sql/interview_schema.sql` 与 `sql/pgvector_rag_schema.sql`。
 
 ## 文件作者标识约束（强制）
 

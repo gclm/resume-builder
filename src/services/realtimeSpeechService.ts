@@ -18,6 +18,7 @@ const TEXT = {
   connectFailed: '建立实时语音连接失败',
   recognitionFailed: '实时语音识别失败',
   connectionTimeout: '实时语音连接超时，请重试',
+  unsupportedWebSocket: '当前浏览器不支持实时语音 WebSocket',
 } as const
 
 export interface RealtimeTranscriptionCallbacks {
@@ -57,8 +58,21 @@ function buildRealtimeCallsUrl(baseUrl: string, callsPath?: string): string {
   return `${normalizeBaseUrl(baseUrl)}${normalizePath(callsPath || '', '/v1/realtime/calls')}`
 }
 
+function buildBackendWebSocketUrl(path: string): string {
+  const target = path.trim()
+  if (target.startsWith('ws://') || target.startsWith('wss://')) {
+    return target
+  }
+  const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:'
+  return `${protocol}//${window.location.host}${normalizePath(target, '/ws/ai/realtime-asr')}`
+}
+
 function asText(value: unknown): string {
   return typeof value === 'string' ? value : ''
+}
+
+function normalizeProvider(provider: unknown): 'openai' | 'dashscope' {
+  return asText(provider).trim().toLowerCase() === 'dashscope' ? 'dashscope' : 'openai'
 }
 
 async function requestRealtimeClientSecret(
@@ -73,18 +87,32 @@ async function requestRealtimeClientSecret(
   }
 
   const data = (await response.json().catch(() => ({}))) as RealtimeClientSecretResponse
+  const provider = normalizeProvider(data.provider)
+
+  if (provider === 'dashscope') {
+    return {
+      ...data,
+      provider,
+      clientSecret: '',
+      realtimeApiBaseUrl: '',
+      realtimeCallsPath: '',
+      websocketPath: data.websocketPath || '/ws/ai/realtime-asr',
+      sampleRate: Number(data.sampleRate) || 16000,
+    }
+  }
+
   const clientSecret = asText(data.clientSecret).trim()
   if (!clientSecret) {
     throw new Error(TEXT.missingSecret)
   }
-
-  const realtimeApiBaseUrl = normalizeBaseUrl(data.realtimeApiBaseUrl)
+  const realtimeApiBaseUrl = normalizeBaseUrl(data.realtimeApiBaseUrl || '')
   if (!realtimeApiBaseUrl) {
     throw new Error(TEXT.missingRealtimeBaseUrl)
   }
 
   return {
     ...data,
+    provider,
     clientSecret,
     realtimeApiBaseUrl,
     realtimeCallsPath: normalizePath(data.realtimeCallsPath || '', '/v1/realtime/calls'),
@@ -119,6 +147,11 @@ function extractTranscriptFromEvent(payload: Record<string, unknown>, fallback: 
     return direct
   }
 
+  const segment = asText(payload.segment).trim()
+  if (segment) {
+    return segment
+  }
+
   const text = asText(payload.text).trim()
   if (text) {
     return text
@@ -141,6 +174,80 @@ function extractTranscriptFromEvent(payload: Record<string, unknown>, fallback: 
   return fallback
 }
 
+function waitForWebSocketOpen(webSocket: WebSocket, timeoutMs: number): Promise<void> {
+  if (webSocket.readyState === WebSocket.OPEN) {
+    return Promise.resolve()
+  }
+
+  return new Promise((resolve, reject) => {
+    const timer = setTimeout(() => {
+      cleanup()
+      reject(new Error(TEXT.connectionTimeout))
+    }, timeoutMs)
+
+    const cleanup = () => {
+      clearTimeout(timer)
+      webSocket.removeEventListener('open', handleOpen)
+      webSocket.removeEventListener('error', handleError)
+    }
+
+    const handleOpen = () => {
+      cleanup()
+      resolve()
+    }
+
+    const handleError = () => {
+      cleanup()
+      reject(new Error(TEXT.connectFailed))
+    }
+
+    webSocket.addEventListener('open', handleOpen)
+    webSocket.addEventListener('error', handleError)
+  })
+}
+
+function parseRealtimeEvent(raw: unknown): Record<string, unknown> | null {
+  const text = asText(raw)
+  if (!text.trim()) return null
+  try {
+    return JSON.parse(text) as Record<string, unknown>
+  } catch {
+    return null
+  }
+}
+
+function resampleAudio(input: Float32Array, sourceRate: number, targetRate: number): Float32Array {
+  if (sourceRate === targetRate) {
+    return input
+  }
+  const ratio = sourceRate / targetRate
+  const length = Math.max(1, Math.round(input.length / ratio))
+  const output = new Float32Array(length)
+  for (let i = 0; i < length; i += 1) {
+    output[i] = input[Math.min(input.length - 1, Math.round(i * ratio))] || 0
+  }
+  return output
+}
+
+function floatToPcm16(input: Float32Array): Uint8Array {
+  const buffer = new ArrayBuffer(input.length * 2)
+  const view = new DataView(buffer)
+  for (let i = 0; i < input.length; i += 1) {
+    const sample = Math.max(-1, Math.min(1, input[i] || 0))
+    view.setInt16(i * 2, sample < 0 ? sample * 0x8000 : sample * 0x7fff, true)
+  }
+  return new Uint8Array(buffer)
+}
+
+function bytesToBase64(bytes: Uint8Array): string {
+  let binary = ''
+  const chunkSize = 0x8000
+  for (let i = 0; i < bytes.length; i += chunkSize) {
+    binary += String.fromCharCode(...bytes.subarray(i, i + chunkSize))
+  }
+  return btoa(binary)
+}
+
 export class RealtimeTranscriptionSession {
   private readonly model?: string
   private readonly language?: string
@@ -148,6 +255,10 @@ export class RealtimeTranscriptionSession {
 
   private peerConnection: RTCPeerConnection | null = null
   private dataChannel: RTCDataChannel | null = null
+  private backendWebSocket: WebSocket | null = null
+  private audioContext: AudioContext | null = null
+  private audioSource: MediaStreamAudioSourceNode | null = null
+  private audioProcessor: ScriptProcessorNode | null = null
   private microphoneStream: MediaStream | null = null
   private finalSegments: string[] = []
   private partialSegment = ''
@@ -160,12 +271,9 @@ export class RealtimeTranscriptionSession {
   }
 
   async start(): Promise<void> {
-    if (this.peerConnection) return
+    if (this.peerConnection || this.backendWebSocket) return
     if (!navigator.mediaDevices?.getUserMedia) {
       throw new Error(TEXT.unsupportedMediaDevice)
-    }
-    if (typeof RTCPeerConnection === 'undefined') {
-      throw new Error(TEXT.unsupportedWebrtc)
     }
 
     this.stopped = false
@@ -176,6 +284,15 @@ export class RealtimeTranscriptionSession {
         model: this.model,
         language: this.language,
       })
+
+      if (clientSecret.provider === 'dashscope') {
+        await this.startDashScopeSession(clientSecret)
+        return
+      }
+
+      if (typeof RTCPeerConnection === 'undefined') {
+        throw new Error(TEXT.unsupportedWebrtc)
+      }
 
       const microphoneStream = await navigator.mediaDevices.getUserMedia({
         audio: {
@@ -217,8 +334,8 @@ export class RealtimeTranscriptionSession {
       await waitForIceGatheringComplete(peerConnection)
 
       const localSdp = peerConnection.localDescription?.sdp || offer.sdp || ''
-      const endpoint = buildRealtimeCallsUrl(clientSecret.realtimeApiBaseUrl, clientSecret.realtimeCallsPath)
-      const response = await postRealtimeCallSdp(endpoint, clientSecret.clientSecret, localSdp)
+      const endpoint = buildRealtimeCallsUrl(clientSecret.realtimeApiBaseUrl || '', clientSecret.realtimeCallsPath)
+      const response = await postRealtimeCallSdp(endpoint, clientSecret.clientSecret || '', localSdp)
 
       if (!response.ok) {
         const errorText = extractErrorText(await response.text().catch(() => ''))
@@ -244,10 +361,18 @@ export class RealtimeTranscriptionSession {
 
     const dataChannel = this.dataChannel
     const peerConnection = this.peerConnection
+    const backendWebSocket = this.backendWebSocket
+    const audioProcessor = this.audioProcessor
+    const audioSource = this.audioSource
+    const audioContext = this.audioContext
     const microphoneStream = this.microphoneStream
 
     this.dataChannel = null
     this.peerConnection = null
+    this.backendWebSocket = null
+    this.audioProcessor = null
+    this.audioSource = null
+    this.audioContext = null
     this.microphoneStream = null
     this.partialSegment = ''
 
@@ -267,6 +392,32 @@ export class RealtimeTranscriptionSession {
       }
     }
 
+    if (backendWebSocket && backendWebSocket.readyState === WebSocket.OPEN) {
+      try {
+        backendWebSocket.send(JSON.stringify({ type: 'session.finish' }))
+        backendWebSocket.close()
+      } catch {
+        // Ignore close errors.
+      }
+    } else if (backendWebSocket && backendWebSocket.readyState === WebSocket.CONNECTING) {
+      try {
+        backendWebSocket.close()
+      } catch {
+        // Ignore close errors.
+      }
+    }
+
+    try {
+      audioProcessor?.disconnect()
+      audioSource?.disconnect()
+    } catch {
+      // Ignore close errors.
+    }
+
+    if (audioContext && audioContext.state !== 'closed') {
+      void audioContext.close().catch(() => undefined)
+    }
+
     if (microphoneStream) {
       for (const track of microphoneStream.getTracks()) {
         track.stop()
@@ -277,6 +428,144 @@ export class RealtimeTranscriptionSession {
     if (!options.silent) {
       this.emitMergedText()
     }
+  }
+
+  private async startDashScopeSession(clientSecret: RealtimeClientSecretResponse): Promise<void> {
+    if (typeof WebSocket === 'undefined') {
+      throw new Error(TEXT.unsupportedWebSocket)
+    }
+
+    const webSocket = new WebSocket(buildBackendWebSocketUrl(clientSecret.websocketPath || '/ws/ai/realtime-asr'))
+    this.backendWebSocket = webSocket
+    webSocket.onerror = () => {
+      this.handleError(TEXT.dataChannelError)
+    }
+    webSocket.onclose = () => {
+      if (!this.stopped) {
+        this.handleError(TEXT.connectionDisconnected)
+      }
+    }
+
+    await waitForWebSocketOpen(webSocket, 12000)
+
+    const sampleRate = Number(clientSecret.sampleRate) || 16000
+    const waitForStarted = this.waitForDashScopeSessionStarted(webSocket, 12000)
+    webSocket.send(JSON.stringify({
+      type: 'session.start',
+      model: this.model || clientSecret.model,
+      language: this.language || clientSecret.language || 'zh',
+      sampleRate,
+    }))
+    await waitForStarted
+    webSocket.onmessage = (event) => {
+      this.handleRealtimeEvent(event.data)
+    }
+
+    const microphoneStream = await navigator.mediaDevices.getUserMedia({
+      audio: {
+        echoCancellation: true,
+        noiseSuppression: true,
+        autoGainControl: true,
+      },
+    })
+    this.microphoneStream = microphoneStream
+    await this.startPcmAudioStreaming(microphoneStream, sampleRate)
+    this.callbacks.onStateChange?.('connected')
+  }
+
+  private waitForDashScopeSessionStarted(webSocket: WebSocket, timeoutMs: number): Promise<void> {
+    return new Promise((resolve, reject) => {
+      let settled = false
+
+      const cleanup = () => {
+        clearTimeout(timer)
+        webSocket.removeEventListener('message', handleMessage)
+        webSocket.removeEventListener('error', handleError)
+        webSocket.removeEventListener('close', handleClose)
+      }
+
+      const settleResolve = () => {
+        if (settled) return
+        settled = true
+        cleanup()
+        resolve()
+      }
+
+      const settleReject = (message: string) => {
+        if (settled) return
+        settled = true
+        cleanup()
+        reject(new Error(message))
+      }
+
+      const handleMessage = (event: MessageEvent) => {
+        this.handleRealtimeEvent(event.data)
+        const payload = parseRealtimeEvent(event.data)
+        const eventType = asText(payload?.type)
+        if (eventType === 'session_started') {
+          settleResolve()
+          return
+        }
+        if (eventType === 'error' || eventType.endsWith('.failed')) {
+          const message = payload ? this.extractRealtimeErrorMessage(payload) : ''
+          settleReject(message || TEXT.recognitionFailed)
+        }
+      }
+
+      const handleError = () => {
+        settleReject(TEXT.connectFailed)
+      }
+
+      const handleClose = () => {
+        settleReject(TEXT.connectionDisconnected)
+      }
+
+      const timer = setTimeout(() => {
+        settleReject(TEXT.connectionTimeout)
+      }, timeoutMs)
+
+      webSocket.addEventListener('message', handleMessage)
+      webSocket.addEventListener('error', handleError)
+      webSocket.addEventListener('close', handleClose)
+    })
+  }
+
+  private async startPcmAudioStreaming(stream: MediaStream, targetSampleRate: number): Promise<void> {
+    const AudioContextCtor = window.AudioContext ||
+      (window as Window & { webkitAudioContext?: typeof AudioContext }).webkitAudioContext
+    if (!AudioContextCtor) {
+      throw new Error(TEXT.unsupportedMediaDevice)
+    }
+    const audioContext = new AudioContextCtor()
+    if (audioContext.state === 'suspended') {
+      await audioContext.resume().catch(() => undefined)
+    }
+    const source = audioContext.createMediaStreamSource(stream)
+    const processor = audioContext.createScriptProcessor(4096, 1, 1)
+
+    this.audioContext = audioContext
+    this.audioSource = source
+    this.audioProcessor = processor
+
+    processor.onaudioprocess = (event) => {
+      const output = event.outputBuffer.getChannelData(0)
+      output.fill(0)
+      const webSocket = this.backendWebSocket
+      if (!webSocket || webSocket.readyState !== WebSocket.OPEN || this.stopped) {
+        return
+      }
+      const input = event.inputBuffer.getChannelData(0)
+      const resampled = resampleAudio(input, audioContext.sampleRate, targetSampleRate)
+      const audio = bytesToBase64(floatToPcm16(resampled))
+      if (!audio) return
+      webSocket.send(JSON.stringify({
+        type: 'input_audio_buffer.append',
+        audio,
+      }))
+    }
+
+    source.connect(processor)
+    processor.connect(audioContext.destination)
   }
 
   private attachDataChannel(channel: RTCDataChannel) {
@@ -332,18 +621,28 @@ export class RealtimeTranscriptionSession {
   }
 
   private handleRealtimeEvent(raw: unknown) {
-    const text = asText(raw)
-    if (!text.trim()) return
-
-    let payload: Record<string, unknown>
-    try {
-      payload = JSON.parse(text) as Record<string, unknown>
-    } catch {
-      return
-    }
+    const payload = parseRealtimeEvent(raw)
+    if (!payload) return
 
     const eventType = asText(payload.type)
     if (!eventType) return
+
+    if (eventType === 'session_started') {
+      this.callbacks.onStateChange?.('connected')
+      return
+    }
+
+    if (eventType === 'session_closed') {
+      return
+    }
+
+    if (eventType === 'conversation.item.input_audio_transcription.text') {
+      const preview = asText(payload.mergedText).trim() || asText(payload.text).trim()
+      if (!preview) return
+      this.partialSegment = preview
+      this.emitMergedText()
+      return
+    }
 
     if (
       eventType === 'conversation.item.input_audio_transcription.delta' ||
