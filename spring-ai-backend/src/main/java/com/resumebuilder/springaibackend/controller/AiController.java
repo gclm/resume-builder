@@ -1,3 +1,4 @@
+// author: jf
 package com.resumebuilder.springaibackend.controller;
 
 import com.resumebuilder.springaibackend.dto.ChatRequest;
@@ -6,6 +7,7 @@ import com.resumebuilder.springaibackend.dto.RagIngestRequest;
 import com.resumebuilder.springaibackend.dto.RagIngestResponse;
 import com.resumebuilder.springaibackend.dto.RagQueryRequest;
 import com.resumebuilder.springaibackend.dto.RagQueryResponse;
+import com.resumebuilder.springaibackend.dto.RagUploadResponse;
 import com.resumebuilder.springaibackend.dto.RealtimeClientSecretRequest;
 import com.resumebuilder.springaibackend.dto.RealtimeClientSecretResponse;
 import com.resumebuilder.springaibackend.dto.InterviewSessionDetailResponse;
@@ -13,6 +15,7 @@ import com.resumebuilder.springaibackend.dto.InterviewSessionSummaryResponse;
 import com.resumebuilder.springaibackend.dto.InterviewStreamEvent;
 import com.resumebuilder.springaibackend.dto.InterviewTurnRequest;
 import com.resumebuilder.springaibackend.service.AiGatewayService;
+import com.resumebuilder.springaibackend.service.RagService;
 import com.resumebuilder.springaibackend.service.RealtimeSessionService;
 import com.resumebuilder.springaibackend.service.InterviewSessionStoreService;
 import com.resumebuilder.springaibackend.service.InterviewTurnService;
@@ -27,6 +30,7 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.multipart.MultipartFile;
 import reactor.core.publisher.Flux;
 
 @RestController
@@ -37,17 +41,20 @@ public class AiController {
     private final InterviewTurnService interviewTurnService;
     private final RealtimeSessionService realtimeSessionService;
     private final InterviewSessionStoreService interviewSessionStoreService;
+    private final RagService ragService;
 
     public AiController(
             AiGatewayService aiGatewayService,
             InterviewTurnService interviewTurnService,
             RealtimeSessionService realtimeSessionService,
-            InterviewSessionStoreService interviewSessionStoreService
+            InterviewSessionStoreService interviewSessionStoreService,
+            RagService ragService
     ) {
         this.aiGatewayService = aiGatewayService;
         this.interviewTurnService = interviewTurnService;
         this.realtimeSessionService = realtimeSessionService;
         this.interviewSessionStoreService = interviewSessionStoreService;
+        this.ragService = ragService;
     }
 
     @PostMapping("/chat")
@@ -64,7 +71,7 @@ public class AiController {
                 .onErrorResume(ex -> Flux.just(
                         ServerSentEvent.<String>builder()
                                 .event("error")
-                                .data(ex.getMessage() == null ? "stream failed" : ex.getMessage())
+                                .data(ex.getMessage() == null ? "流式响应失败" : ex.getMessage())
                                 .build()
                 ));
     }
@@ -98,11 +105,16 @@ public class AiController {
     }
     @PostMapping("/rag/query")
     public RagQueryResponse ragQuery(@Valid @RequestBody RagQueryRequest request) {
-        return aiGatewayService.ragQuery(request);
+        return ragService.ragQuery(request);
     }
 
     @PostMapping("/rag/documents")
     public RagIngestResponse ingestDocuments(@Valid @RequestBody RagIngestRequest request) {
-        return new RagIngestResponse(aiGatewayService.ingestDocuments(request));
+        return new RagIngestResponse(ragService.ingestDocuments(request));
+    }
+
+    @PostMapping(value = "/rag/upload", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+    public RagUploadResponse uploadRagAssets(@RequestParam("files") List<MultipartFile> files) {
+        return ragService.uploadFiles(files);
     }
 }

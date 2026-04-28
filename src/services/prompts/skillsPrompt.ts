@@ -4,7 +4,7 @@ import { COMMON_OUTPUT_RULES } from './shared'
 export const skillsOutputRules = [
   ...COMMON_OUTPUT_RULES,
   '- 不要把每一个零散技能拆成单独一条，必须按技术域归并后输出。',
-  '- 「优化后内容」优先输出 4-8 条技能要点；只有原始内容非常短时，才允许压缩到 1-2 条。若 AI 能力维度本身较多，可适当增加条数，但仍需避免碎片化。',
+  '- 「优化后内容」优先输出 4-15 条技能要点；只有原始内容非常短时，才允许压缩到 1-2 条。若 AI 能力维度本身较多，可适当增加条数，但仍需避免碎片化。',
   '- 技术域分组优先参考：Java基础、Spring全家桶/框架、MySQL、Redis、消息队列MQ、AI Agent/RAG、AI框架与编排、AI辅助编程、MCP/Skills/工具协议、模型选型与Prompt工程、Spring AI生态、网络编程、Linux/运维、前端技术栈、设计模式、算法与数据结构、定时任务/调度器。',
   '- AI 相关能力禁止统一堆叠成一条“AI技能/大模型”总括描述；若原始内容覆盖多个独立 AI 方向，必须按方向拆成多条。',
   '- AI 技能子类优先参考以下拆分方式：1）AI Agent 架构与 RAG 技术栈 2）LangChain/LangGraph/LlamaIndex/AutoGen 等 AI 框架与编排 3）Cursor、Claude Code、Codex、Vibe Coding 等 AI辅助编程 4）MCP、Skills、工具协议、大模型中间件与私有数据/API 对接 5）模型选型与 Prompt 工程 6）Spring AI 生态集成。',

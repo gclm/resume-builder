@@ -56,7 +56,7 @@ spring-ai-backend/
 ├─ README.md
 ├─ .env.example
 ├─ docker-compose.yml
-├─ sql/
+├─ ../sql/
 │  └─ *.sql
 ├─ src/main/java/com/resumebuilder/springaibackend/
 │  ├─ controller/
@@ -66,7 +66,14 @@ spring-ai-backend/
 │  ├─ dto/
 │  ├─ config/
 │  ├─ exception/
-│  └─ cleaner/
+│  ├─ cleaner/
+│  ├─ client/
+│  ├─ vector/
+│  ├─ embedding/
+│  ├─ ocr/
+│  ├─ realtime/
+│  ├─ parser/
+│  └─ chunking/
 └─ src/main/resources/
    ├─ application.yml
    └─ mapper/
@@ -75,7 +82,10 @@ spring-ai-backend/
 
 补充说明：
 - Java 包根路径固定为 `com.resumebuilder.springaibackend`。
-- 允许在现有目录下继续细分子包，例如 `service/interview`、`dto/rag`、`mapper/interview`。
+- `service/` 只能存放真正带 `@Service` 注解、且承担业务用例编排职责的类。
+- 非 `@Service` 文件禁止放入 `service/`；即使被 Service 依赖，也必须按功能职责放入外层职责目录。
+- 允许在现有目录下继续细分子包，例如 `service/interview`、`dto/rag`、`mapper/interview`、`client/openai`、`vector/pgvector`。
+- 允许使用本文档明确列出的外层职责目录：`client/`、`vector/`、`embedding/`、`ocr/`、`realtime/`、`parser/`、`chunking/`。
 - **禁止**在没有规则支撑的情况下随意新增新的平级大目录，例如 `manager`、`core`、`common`、`helper`、`util`、`domain`、`application`、`infrastructure`。
 - 如确需新增新的平级目录，必须先更新本文档，再落代码。
 
@@ -90,17 +100,18 @@ controller -> service -> mapper -> entity
               |         |
               |         -> mapper.xml
               |
-              -> cleaner / config / AI client / vector store / datasource
+              -> cleaner / client / vector / embedding / ocr / realtime / parser / chunking / config / datasource
 ```
 
 明确要求如下：
 
 - `controller` 只面向 HTTP，不直接处理数据库、向量检索或模型 SDK 细节。
-- `service` 负责业务编排，是当前结构下的主要业务层。
+- `service` 负责业务编排，是当前结构下的主要业务层，但目录内只能放真正 `@Service` 业务编排类。
 - `mapper` 只负责持久化访问，不承载业务流程。
 - `entity` 只表达数据库持久化对象，不承担接口出参职责。
 - `config` 只做配置装配与 Bean 创建，不写业务规则。
 - `cleaner` 只做文本/Markdown/输出清洗，不写 HTTP 或数据库逻辑。
+- `client`、`vector`、`embedding`、`ocr`、`realtime`、`parser`、`chunking` 是外层职责目录，用于承接非业务编排的支撑实现。
 
 明确禁止的依赖与行为：
 
@@ -134,22 +145,31 @@ controller -> service -> mapper -> entity
 - 按能力拆分聊天、面试、RAG、音频、Realtime 等服务。
 - 串联 AI 调用、数据存储、向量检索、文本清洗等步骤。
 
+强制定位：
+- `service/` 只允许存放真正带 `@Service` 注解、且以业务用例或流程编排为核心职责的类。
+- 没有 `@Service` 注解的 Java 文件一律不得放入 `service/`。
+- `@Service` 只是进入 `service/` 的必要条件，不是充分条件；如果主要职责不是业务编排，必须放到对应外层职责目录。
+- 即使被业务 Service 依赖，SDK client、HTTP client support、provider adapter、VectorStore 适配、pgvector repository、Embedding provider、OCR 实现、WebSocket handler、parser、chunker、support/helper 类也不得放入 `service/`。
+
 边界：
 - 一个 Service 应围绕单一业务能力或单一职责展开，禁止演变为“全能大服务”。
 - 当一个类同时承担聊天、RAG、面试、转写、持久化等多种职责时，应拆分。
-- Service 可以依赖 `mapper`、`entity`、`cleaner`、`config` 和必要的 AI / vector store 客户端，但不能把 SQL 细节塞进自身。
-- 自定义业务 SQL 必须下沉到 `mapper.xml`，不能写在 Service 中。
+- Service 可以依赖 `mapper`、`entity`、`cleaner`、`config` 和必要的外层职责目录实现，但禁止写死任何 PostgreSQL、MySQL 或其他数据库 SQL 字符串。
+- MySQL 自定义业务 SQL 必须下沉到 `mapper.xml`，不能写在 Service 中。
+- PostgreSQL + pgvector 的向量写入和检索必须通过 Spring AI `VectorStore` / `PgVectorStore`，不能在 Service 或 Repository 中手写 pgvector SQL。
 
 ### 5.3 `mapper/`
 
 职责：
 - 定义 MyBatis / MyBatis-Plus 持久化接口。
 - 面向数据库表和查询结果做映射。
+- Java `mapper/` 目录只允许存放带 `@Mapper` 的 Mapper 接口。
 
 边界：
 - 不写业务编排。
 - 不写 HTTP 逻辑。
 - 不依赖 `service`。
+- 不存放 MyBatis 查询投影、结果行对象、Row/Projection 类；这类持久化结果对象必须放入 `entity/`，对外 API 模型才放入 `dto/`。
 
 强制限制：
 - 业务 SQL（Mapper 自定义 SQL）必须写在 `src/main/resources/mapper/*.xml` 中。
@@ -186,7 +206,8 @@ controller -> service -> mapper -> entity
 边界：
 - 不写业务规则。
 - 不做会话流程推进。
-- 不在应用启动时自动执行一次性建表 SQL。
+- 不在应用启动时执行项目自写的一次性建表 SQL。
+- pgvector 禁止后端自动建表，Spring AI `PgVectorStore` 必须保持 `initializeSchema(false)`；表结构只能由开发者手工执行 `sql/pgvector_rag_schema.sql` 创建。
 - 不在配置类中做复杂业务初始化。
 
 ### 5.7 `exception/`
@@ -209,7 +230,80 @@ controller -> service -> mapper -> entity
 - 不放数据库访问。
 - 不放面试回合状态机或 RAG 检索编排。
 
-### 5.9 `src/main/resources/`
+### 5.9 `client/`
+
+职责：
+- 放外部 HTTP、AI Provider、SDK、RestClient、WebSocket 上游接入支撑。
+- 按 provider 或能力继续细分，例如 `client/openai`、`client/ollama`、`client/dashscope`。
+
+边界：
+- 不写业务编排。
+- 不写数据库访问。
+- 不放 Controller 或接口 DTO。
+- 不把 provider 选择逻辑和业务流程混在一起。
+
+### 5.10 `vector/`
+
+职责：
+- 放向量库访问、Spring AI `VectorStore` / `PgVectorStore` 适配、RAG 向量仓储封装。
+- RAG 向量写入必须调用 `VectorStore.add`。
+- RAG 相似度检索必须调用 `VectorStore.similaritySearch`。
+
+边界：
+- 不手写 pgvector 插入、检索、建表或索引 SQL。
+- 不承载回答生成、上下文拼装等业务编排。
+- 不存放 MySQL 会话持久化逻辑。
+
+### 5.11 `embedding/`
+
+职责：
+- 放 Embedding 抽象、Embedding provider 选择、Spring AI `EmbeddingModel` adapter。
+- 支持按配置在 OpenAI、Ollama 等 Embedding provider 间切换。
+
+边界：
+- 不写 RAG 问答业务编排。
+- 不写 pgvector SQL。
+- 不直接处理 HTTP 接口。
+
+### 5.12 `ocr/`
+
+职责：
+- 放 OCR 能力接入、图片/文件识别、视觉模型 OCR 调用与结果解析支撑。
+
+边界：
+- 不写上传接口包装。
+- 不写 RAG 入库编排。
+- 不放通用 RestClient 基础类，通用上游调用支撑应放 `client/`。
+
+### 5.13 `realtime/`
+
+职责：
+- 放 Realtime、语音 WebSocket handler、DashScope Realtime ASR 桥接、协议转换与音频流支撑。
+
+边界：
+- Realtime 凭据签发业务编排仍放 `service/`。
+- 上游 HTTP / WebSocket client 通用支撑放 `client/`。
+- 不写 Controller 或数据库访问。
+
+### 5.14 `parser/`
+
+职责：
+- 放文档解析、文件内容提取、上传文件内容标准化等支撑能力。
+
+边界：
+- 不写 RAG 入库业务编排。
+- 不写向量库保存或检索逻辑。
+
+### 5.15 `chunking/`
+
+职责：
+- 放文本切块、分段策略、chunk metadata 构造等支撑能力。
+
+边界：
+- 不写 RAG 问答编排。
+- 不写向量库保存或检索逻辑。
+
+### 5.16 `src/main/resources/`
 
 职责：
 - `application.yml`：应用配置。
@@ -218,7 +312,7 @@ controller -> service -> mapper -> entity
 边界：
 - 不存放临时脚本。
 - 不存放一次性建表 SQL。
-- 一次性 SQL 必须放在 `spring-ai-backend/sql/`。
+- 一次性 SQL 必须放在仓库根目录 `sql/`。
 
 ---
 
@@ -231,6 +325,7 @@ controller -> service -> mapper -> entity
 - 接口放 `controller/`
 - 请求响应模型放 `dto/`
 - 聊天、流式输出、输出净化编排放 `service/`
+- OpenAI / Ollama / 其他上游调用支撑放 `client/`
 - 文本清洗细节放 `cleaner/`
 
 ### 6.2 Interview
@@ -245,6 +340,11 @@ controller -> service -> mapper -> entity
 - RAG 接口放 `controller/`
 - RAG 请求响应模型放 `dto/`
 - 检索编排、上下文拼装、回答生成放 `service/`
+- 向量库写入、检索和 Spring AI `VectorStore` 封装放 `vector/`
+- Embedding provider 选择、Embedding adapter 放 `embedding/`
+- 文档解析、文件内容提取放 `parser/`
+- 文本切块放 `chunking/`
+- OCR 识别支撑放 `ocr/`
 - 向量库配置与接入放 `config/`
 
 ### 6.4 Audio
@@ -252,12 +352,15 @@ controller -> service -> mapper -> entity
 - 音频转写接口放 `controller/`
 - 音频请求响应模型放 `dto/`
 - 转写调用编排放 `service/`
+- 上游 ASR / OCR / 语音 provider 接入支撑按职责放 `client/`、`ocr/` 或 `realtime/`
 
 ### 6.5 Realtime
 
 - Realtime 凭据接口放 `controller/`
 - Realtime 请求响应模型放 `dto/`
 - 凭据签发与上游调用编排放 `service/`
+- WebSocket handler、DashScope Realtime ASR 桥接、协议转换放 `realtime/`
+- 通用上游 client 支撑放 `client/`
 
 ---
 
@@ -271,24 +374,28 @@ controller -> service -> mapper -> entity
 
 ### 7.2 一次性 SQL 目录
 
-- 建表、索引、初始化等一次性 SQL，必须写入 `spring-ai-backend/sql/` 下的独立 `.sql` 文件。
+- 建表、索引、初始化等一次性 SQL，必须写入仓库根目录 `sql/` 下的独立 `.sql` 文件。
 - **禁止**把一次性建表 SQL 写进 Java 字符串、启动逻辑或 README 示例中替代正式 SQL 文件。
+- **pgvector 建表要求**：禁止 Spring 后端自动建表，Spring AI `PgVectorStore` 必须保持 `initializeSchema(false)`；表结构只能由开发者手工执行 `sql/pgvector_rag_schema.sql` 创建。
 
 ### 7.3 会话建表脚本
 
-- 会话建表脚本仅保留一份：`spring-ai-backend/sql/interview_schema.sql`。
+- 会话建表脚本仅保留一份：`sql/interview_schema.sql`。
 - **禁止**在其他目录复制第二份会话建表脚本。
 
 ### 7.4 业务 SQL 存放位置
 
-- 业务 SQL（Mapper 自定义 SQL）必须写在 `src/main/resources/mapper/*.xml`。
+- 后端 Java 代码中禁止写死 PostgreSQL、MySQL 或其他数据库 SQL 字符串。
+- MySQL 自定义业务 SQL 必须写在 `src/main/resources/mapper/*.xml`。
 - **禁止**写在 Mapper 注解中。
-- **禁止**写在 Controller 或 Service 中直接拼接执行。
+- **禁止**写在 Controller、Service、Config、Repository 或其他 Java 代码中直接拼接执行。
+- PostgreSQL + pgvector 向量库存储与相似度检索必须通过 Spring AI `VectorStore` / `PgVectorStore` 的 `add`、`similaritySearch` 等能力完成。
 
 ### 7.5 启动阶段限制
 
-- **禁止**在应用启动流程中自动执行一次性建表 SQL。
+- **禁止**在应用启动流程中执行项目自写的一次性建表 SQL。
 - 表结构初始化由开发者手工执行。
+- **pgvector 例外收紧**：不再允许 Spring AI `PgVectorStore` 内部 schema 初始化创建向量表；禁止在项目代码中通过 `JdbcTemplate.execute`、字符串 SQL 或类似方式自写 DDL，向量表只能由 `sql/pgvector_rag_schema.sql` 手工创建。
 
 ---
 
@@ -296,8 +403,9 @@ controller -> service -> mapper -> entity
 
 在当前结构下，允许的扩展方式如下：
 
-1. 在现有层内按业务能力拆子包
+1. 在现有层内按业务能力拆子包，但必须符合目录本身职责
    - 例如 `service/chat/`、`service/interview/`、`dto/rag/`、`mapper/interview/`。
+   - `service/` 子包仍只能放真正 `@Service` 业务编排类。
 
 2. 在 `resources/mapper/` 中增加 XML
    - 用于承接新增 Mapper SQL。
@@ -305,10 +413,15 @@ controller -> service -> mapper -> entity
 3. 在 `sql/` 中增加独立 SQL 文件
    - 仅用于一次性 DDL、索引、初始化。
 
+4. 在本文档列出的外层职责目录中按 provider 或能力继续细分
+   - 例如 `client/openai/`、`client/dashscope/`、`vector/pgvector/`、`embedding/ollama/`、`realtime/dashscope/`。
+
 明确禁止：
 
 - 未经规则更新，新增新的平级架构层，如 `domain/`、`application/`、`infrastructure/`、`adapter/`。
 - 新增语义模糊的大杂烩目录，如 `common/`、`helper/`、`misc/`、`utils/`、`manager/`。
+- 把非 `@Service` 支撑类放进 `service/`。
+- 把 SDK client、provider adapter、repository、parser、chunker、WebSocket handler 等支撑实现伪装成 Service 后继续堆在 `service/`。
 - 把所有能力继续堆进单个 `AiController` 或单个 `AiGatewayService` 而不做按能力拆分。
 
 ---
@@ -320,29 +433,54 @@ controller -> service -> mapper -> entity
 1. 它是不是 HTTP 接口、参数接收、响应返回、流式 HTTP 包装？
    - 是，放 `controller/`
 
-2. 它是不是聊天、面试、RAG、转写、Realtime 的业务编排逻辑？
+2. 它是不是聊天、面试、RAG、转写、Realtime 的业务用例或流程编排逻辑，并且类本身需要 `@Service` 注解？
    - 是，放 `service/`
+   - 不是 `@Service`，禁止放 `service/`
 
-3. 它是不是数据库访问接口或自定义 SQL？
+3. 它是不是外部 HTTP、AI Provider、RestClient、SDK、WebSocket 上游调用支撑？
+   - 是，放 `client/`
+
+4. 它是不是向量库写入、相似度检索、Spring AI `VectorStore` / `PgVectorStore` 封装？
+   - 是，放 `vector/`
+   - 必须使用 Spring AI `VectorStore` 的 `add`、`similaritySearch` 等能力
+   - 禁止手写 pgvector SQL
+
+5. 它是不是 Embedding 抽象、provider 选择、EmbeddingModel adapter？
+   - 是，放 `embedding/`
+
+6. 它是不是 OCR 识别、图片/文件识别、视觉模型 OCR 结果解析？
+   - 是，放 `ocr/`
+
+7. 它是不是 Realtime WebSocket handler、语音流协议桥接、DashScope Realtime ASR 支撑？
+   - 是，放 `realtime/`
+
+8. 它是不是文档解析、文件内容提取、上传文件内容标准化？
+   - 是，放 `parser/`
+
+9. 它是不是文本切块、chunk metadata 构造、分段策略？
+   - 是，放 `chunking/`
+
+10. 它是不是数据库访问接口或自定义 SQL？
    - 接口放 `mapper/`
-   - SQL 放 `src/main/resources/mapper/*.xml`
+   - MySQL 自定义 SQL 放 `src/main/resources/mapper/*.xml`
+   - PostgreSQL + pgvector 向量库操作优先使用 Spring AI `VectorStore`，不新增后端代码 SQL
 
-4. 它是不是表映射实体？
+11. 它是不是表映射实体？
    - 是，放 `entity/`
 
-5. 它是不是请求、响应、事件、轻量数据传输对象？
+12. 它是不是请求、响应、事件、轻量数据传输对象？
    - 是，放 `dto/`
 
-6. 它是不是配置、属性、Bean、数据源或客户端装配？
+13. 它是不是配置、属性、Bean、数据源或客户端装配？
    - 是，放 `config/`
 
-7. 它是不是异常定义或统一异常处理？
+14. 它是不是异常定义或统一异常处理？
    - 是，放 `exception/`
 
-8. 它是不是文本净化、Markdown 清洗、输出规整？
+15. 它是不是文本净化、Markdown 清洗、输出规整？
    - 是，放 `cleaner/`
 
-9. 如果以上都不是
+16. 如果以上都不是
    - 优先检查是否应归入现有目录的子包。
    - 仍无法归类时，先更新本文档，再新增目录。
 
@@ -368,12 +506,13 @@ controller -> service -> mapper -> entity
 `spring-ai-backend/` 当前阶段的核心不是追求架构名词，而是先把**目录边界、功能归属、SQL 位置、数据库职责**固定住：
 
 - `controller` 只做接口适配
-- `service` 只做业务编排
+- `service` 只放真正 `@Service` 业务编排类
 - `mapper + mapper.xml` 只做持久化访问
 - `entity` 只做数据库实体
 - `dto` 只做数据传输模型
 - `config` 只做配置与装配
 - `exception` 只做异常处理
 - `cleaner` 只做文本清洗
+- `client / vector / embedding / ocr / realtime / parser / chunking` 只做对应功能支撑实现
 
 只要边界清晰，`spring-ai-backend` 就能在不大改前端的前提下，持续演进成一个稳定、可维护、面向 AI 业务的 Java 后端。

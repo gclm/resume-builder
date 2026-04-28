@@ -1,11 +1,12 @@
+// author: jf
 package com.resumebuilder.springaibackend.dto;
 
 import jakarta.validation.constraints.NotBlank;
 import java.util.List;
 
 public record InterviewTurnRequest(
-        @NotBlank(message = "mode cannot be empty") String mode,
-        @NotBlank(message = "command cannot be empty") String command,
+        @NotBlank(message = "mode 不能为空") String mode,
+        @NotBlank(message = "command 不能为空") String command,
         String sessionId,
         String userInput,
         List<InterviewHistoryItem> history,
@@ -70,4 +71,3 @@ public record InterviewTurnRequest(
     ) {
     }
 }
-

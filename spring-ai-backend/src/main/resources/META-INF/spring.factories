@@ -1,0 +1,2 @@
+# author: jf
+org.springframework.boot.env.EnvironmentPostProcessor=com.resumebuilder.springaibackend.config.DotenvEnvironmentPostProcessor

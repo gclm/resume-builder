@@ -1,0 +1,65 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- author: jf -->
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "https://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.resumebuilder.springaibackend.mapper.InterviewSessionMapper">
+
+    <resultMap id="InterviewSessionSummaryRowMap"
+               type="com.resumebuilder.springaibackend.entity.InterviewSessionSummaryRow">
+        <id property="sessionId" column="session_id"/>
+        <result property="mode" column="mode"/>
+        <result property="status" column="status"/>
+        <result property="durationMinutes" column="duration_minutes"/>
+        <result property="elapsedSeconds" column="elapsed_seconds"/>
+        <result property="messageCount" column="message_count"/>
+        <result property="totalScore" column="total_score"/>
+        <result property="passed" column="passed"/>
+        <result property="lastMessageContent" column="last_message_content"/>
+        <result property="createdAt" column="created_at"/>
+        <result property="updatedAt" column="updated_at"/>
+    </resultMap>
+
+    <select id="selectSessionSummaries" resultMap="InterviewSessionSummaryRowMap">
+        WITH limited_sessions AS (
+            SELECT
+                session_id,
+                mode,
+                status,
+                duration_minutes,
+                elapsed_seconds,
+                total_score,
+                passed,
+                created_at,
+                updated_at
+            FROM interview_sessions
+            ORDER BY updated_at DESC, session_id DESC
+            LIMIT #{limit}
+        ),
+        message_stats AS (
+            SELECT
+                m.session_id,
+                COUNT(*) AS message_count,
+                MAX(m.seq_no) AS last_seq_no
+            FROM interview_session_messages m
+            INNER JOIN limited_sessions s ON s.session_id = m.session_id
+            GROUP BY m.session_id
+        )
+        SELECT
+            s.session_id,
+            s.mode,
+            s.status,
+            s.duration_minutes,
+            s.elapsed_seconds,
+            COALESCE(ms.message_count, 0) AS message_count,
+            s.total_score,
+            s.passed,
+            lm.content AS last_message_content,
+            s.created_at,
+            s.updated_at
+        FROM limited_sessions s
+        LEFT JOIN message_stats ms ON ms.session_id = s.session_id
+        LEFT JOIN interview_session_messages lm
+            ON lm.session_id = s.session_id
+            AND lm.seq_no = ms.last_seq_no
+        ORDER BY s.updated_at DESC, s.session_id DESC
+    </select>
+</mapper>

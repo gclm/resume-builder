@@ -4,7 +4,10 @@ server:
 
 spring:
   config:
-    import: optional:file:.env[.properties]
+    import:
+      - optional:file:.env[.properties]
+      - optional:file:spring-ai-backend/.env[.properties]
+      - optional:file:../spring-ai-backend/.env[.properties]
   autoconfigure:
     exclude:
       - org.springframework.ai.vectorstore.pgvector.autoconfigure.PgVectorStoreAutoConfiguration
@@ -27,29 +30,63 @@ spring:
         calls-path: ${OPENAI_REALTIME_CALLS_PATH:/v1/realtime/calls}
         transcription-model: ${OPENAI_REALTIME_TRANSCRIPTION_MODEL:gpt-4o-transcribe}
         language: ${OPENAI_REALTIME_LANGUAGE:zh}
+        timeout-seconds: ${OPENAI_REALTIME_TIMEOUT_SECONDS:120}
       embedding:
-        base-url: ${OPENAI_EMBEDDING_BASE_URL:${OPENAI_BASE_URL:https://api.openai.com}}
-        api-key: ${OPENAI_EMBEDDING_API_KEY:${OPENAI_API_KEY:}}
+        base-url: ${OPENAI_EMBEDDING_BASE_URL:${OPENAI_CHAT_BASE_URL:${OPENAI_BASE_URL:https://api.openai.com}}}
+        api-key: ${OPENAI_EMBEDDING_API_KEY:${OPENAI_CHAT_API_KEY:${OPENAI_API_KEY:}}}
         embeddings-path: ${OPENAI_EMBEDDINGS_PATH:/v1/embeddings}
+        timeout-seconds: ${OPENAI_EMBEDDING_TIMEOUT_SECONDS:20}
         options:
-          model: ${OPENAI_EMBEDDING_MODEL:text-embedding-v4}
+          model: ${OPENAI_EMBEDDING_MODEL:text-embedding-3-large}
+      vision:
+        base-url: ${OPENAI_VISION_BASE_URL:${OPENAI_BASE_URL:https://api.openai.com}}
+        api-key: ${OPENAI_VISION_API_KEY:${OPENAI_API_KEY:}}
+        chat-completions-path: ${OPENAI_VISION_CHAT_COMPLETIONS_PATH:/v1/chat/completions}
+        model: ${OPENAI_VISION_MODEL:gpt-4.1}
+        detail: ${OPENAI_VISION_DETAIL:high}
+        timeout-seconds: ${OPENAI_VISION_TIMEOUT_SECONDS:40}
 
 mybatis-plus:
   mapper-locations: classpath*:/mapper/*.xml
 
 app:
   cors-allowed-origins: ${APP_CORS_ALLOWED_ORIGINS:http://localhost:5173}
+  realtime-asr:
+    provider: ${REALTIME_ASR_PROVIDER:dashscope}
+    dashscope:
+      base-url: ${DASHSCOPE_REALTIME_BASE_URL:wss://dashscope.aliyuncs.com/api-ws/v1/realtime}
+      api-key: ${DASHSCOPE_API_KEY:}
+      model: ${DASHSCOPE_REALTIME_MODEL:qwen3-asr-flash-realtime}
+      language: ${DASHSCOPE_REALTIME_LANGUAGE:zh}
+      sample-rate: ${DASHSCOPE_REALTIME_SAMPLE_RATE:16000}
+      vad-threshold: ${DASHSCOPE_REALTIME_VAD_THRESHOLD:0.2}
+      vad-silence-duration-ms: ${DASHSCOPE_REALTIME_VAD_SILENCE_DURATION_MS:800}
+      open-timeout-seconds: ${DASHSCOPE_REALTIME_OPEN_TIMEOUT_SECONDS:10}
+  embedding:
+    provider: ${EMBEDDING_PROVIDER:openai}
+    dimensions: ${EMBEDDING_DIMENSIONS:0}
+    ollama:
+      base-url: ${OLLAMA_EMBEDDING_BASE_URL:${OLLAMA_BASE_URL:http://127.0.0.1:11434}}
+      model: ${OLLAMA_EMBEDDING_MODEL:nomic-embed-text}
+      timeout-seconds: ${OLLAMA_EMBEDDING_TIMEOUT_SECONDS:45}
   rag-top-k: ${APP_RAG_TOP_K:5}
+  rag-chunk-size: ${RAG_CHUNK_SIZE:700}
+  rag-chunk-overlap: ${RAG_CHUNK_OVERLAP:70}
+  rag-max-file-size-mb: ${RAG_MAX_FILE_SIZE_MB:10}
+  interview-rag-top-k: ${APP_INTERVIEW_RAG_TOP_K:4}
+  interview-rag-similarity-threshold: ${APP_INTERVIEW_RAG_SIMILARITY_THRESHOLD:0.5}
+  interview-rag-timeout-seconds: ${APP_INTERVIEW_RAG_TIMEOUT_SECONDS:3}
   mysql:
     url: ${MYSQL_DATASOURCE_URL:jdbc:mysql://localhost:3306/resume-builder?useUnicode=true&characterEncoding=UTF-8&serverTimezone=Asia/Shanghai&useSSL=false&allowPublicKeyRetrieval=true}
     username: ${MYSQL_DATASOURCE_USERNAME:root}
     password: ${MYSQL_DATASOURCE_PASSWORD:root}
     driver-class-name: ${MYSQL_DATASOURCE_DRIVER_CLASS_NAME:com.mysql.cj.jdbc.Driver}
   pgvector:
-    url: ${PGVECTOR_DATASOURCE_URL:jdbc:postgresql://127.0.0.1:5433/vector_store}
-    username: ${PGVECTOR_DATASOURCE_USERNAME:pgvector}
-    password: ${PGVECTOR_DATASOURCE_PASSWORD:pgvector}
+    url: ${PGVECTOR_DATASOURCE_URL:jdbc:postgresql://127.0.0.1:5432/resume_builder_vector}
+    username: ${PGVECTOR_DATASOURCE_USERNAME:postgres}
+    password: ${PGVECTOR_DATASOURCE_PASSWORD:postgres}
     driver-class-name: ${PGVECTOR_DATASOURCE_DRIVER_CLASS_NAME:org.postgresql.Driver}
+    connect-timeout-seconds: ${PGVECTOR_CONNECT_TIMEOUT_SECONDS:8}
 
 management:
   endpoints:
