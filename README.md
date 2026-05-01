@@ -95,6 +95,102 @@ npm run dev
 3. 启动前端。
 4. 二选一启动 Python AI Backend 或 Spring AI 后端。
 
+### Docker 一键部署
+
+Docker 部署提供三类 profile：
+
+- `spring-ai`：启动前端、Spring AI 后端、MySQL 与 pgvector。
+- `python-ai`：启动前端、Python AI Backend、MySQL 与 pgvector。
+- `frontend-only`：仅启动前端静态站点，适合模板预览或纯前端功能。
+
+Spring AI 后端套件与 Python 后端套件不能同时启动。两套后端都会在内部网络使用 `backend:8999` 供 Nginx 代理，且都会尝试映射宿主机 `8999`，同时启动会造成端口和代理目标冲突。切换后端前必须先执行：
+
+```bash
+docker compose down
+```
+
+准备环境变量：
+
+```bash
+copy .env.docker.example .env
+```
+
+编辑 `.env` 后至少填写真实的 `OPENAI_*_API_KEY`、`DASHSCOPE_API_KEY` 或对应 OpenAI-compatible 上游配置。不要提交包含真实密钥的 `.env` 文件。
+
+Windows 推荐使用项目脚本启动，脚本会自动处理本机已有 MySQL 或 PostgreSQL 的端口占用：
+
+```powershell
+.\start-docker-spring-ai.bat
+.\start-docker-python-ai.bat
+.\stop-docker-stack.bat
+```
+
+这两个启动脚本会先执行 `docker compose down`，再启动指定套件；停止脚本只停止当前 stack，不删除 MySQL 和 pgvector 数据卷。
+
+如果宿主机已经有 MySQL 或 PostgreSQL 监听 `.env` 中的 `MYSQL_PORT` / `PGVECTOR_PORT`，启动脚本会跳过对应数据库容器，并把后端连接切到 `host.docker.internal`。如果 `SPRING_PGVECTOR_DATASOURCE_URL` 或 `PYTHON_PGVECTOR_DATASOURCE_URL` 已经指向外部或宿主机 pgvector，启动脚本也会直接跳过 `resume-builder-pgvector` 容器。启动完成后脚本会打印 `docker compose ps` 和当前后端最近日志，并提示你确认宿主机数据库已执行初始化 SQL。
+
+仅启动前端静态站点：
+
+```powershell
+docker compose --profile frontend-only up --build -d
+```
+
+如果确认宿主机没有占用 `3306` / `5433`，也可以直接使用 Compose 启动完整套件：
+
+```powershell
+docker compose --profile spring-ai up --build -d
+docker compose --profile python-ai up --build -d
+```
+
+如果你希望把 Docker 配置保留在 `.env.docker`，可以先复制配置，再继续使用启动脚本；脚本会在没有 `.env` 时自动读取 `.env.docker`：
+
+```powershell
+copy .env.docker.example .env.docker
+.\start-docker-spring-ai.bat
+.\start-docker-python-ai.bat
+```
+
+如果你直接执行 `docker compose --profile spring-ai up --build -d` 或 `docker compose --profile python-ai up --build -d`，Compose 会尝试启动数据库容器；宿主机已有 MySQL 或 PostgreSQL 时可能出现端口占用。此场景必须使用上面的启动脚本。
+
+使用 `start-docker-spring-ai.bat` 或 `start-docker-python-ai.bat` 启动时，脚本会在实际启动 Docker 数据库容器后自动执行初始化 SQL。执行顺序为 MySQL 建库、MySQL 会话表、pgvector 建库、pgvector RAG 表。这个初始化发生在 Docker 启动脚本中，不是 Spring AI 或 Python AI 应用启动自动建表，也不会绕过 `PgVectorStore.initializeSchema(false)` 的约束。
+
+如果脚本检测到宿主机已有 MySQL 或 pgvector 并跳过数据库容器，则不会自动操作宿主机数据库。此时需要你手工执行以下命令。
+
+PowerShell：
+
+```powershell
+Get-Content -Raw sql\mysql_database_schema.sql | docker exec -i resume-builder-mysql mysql -uroot -proot
+Get-Content -Raw sql\interview_schema.sql | docker exec -i resume-builder-mysql mysql -uroot -proot resume-builder
+Get-Content -Raw sql\create_pgvector_resume_builder_database.sql | docker exec -i resume-builder-pgvector psql -v ON_ERROR_STOP=1 -U pgvector -d postgres
+Get-Content -Raw sql\pgvector_rag_schema.sql | docker exec -i resume-builder-pgvector psql -U pgvector -d resume-builder
+```
+
+cmd / Git Bash：
+
+```bash
+docker exec -i resume-builder-mysql mysql -uroot -proot < sql/mysql_database_schema.sql
+docker exec -i resume-builder-mysql mysql -uroot -proot resume-builder < sql/interview_schema.sql
+docker exec -i resume-builder-pgvector psql -v ON_ERROR_STOP=1 -U pgvector -d postgres < sql/create_pgvector_resume_builder_database.sql
+docker exec -i resume-builder-pgvector psql -U pgvector -d resume-builder < sql/pgvector_rag_schema.sql
+```
+
+如果 `.env` 中 pgvector 指向本机宿主机，例如 `host.docker.internal:5433/resume-builder`，应使用本机 PostgreSQL 客户端连接 `127.0.0.1:5433` 的 `resume-builder` 数据库后执行 `sql/pgvector_rag_schema.sql`，不要再创建第二套库名或账号。
+
+访问地址：
+
+- 前端：`http://localhost:3000`
+- 当前后端健康检查：`http://localhost:8999/health`
+- Nginx API 代理：`http://localhost:3000/api/...`
+- Nginx WebSocket 代理：`ws://localhost:3000/ws/...`
+
+常见故障：
+
+- 端口占用：检查 `3000`、`8999`、`3306`、`5433` 是否已被其他进程或旧容器占用，必要时先执行 `docker compose down`。
+- 数据库未初始化：AI 面试会话表需要 `sql/interview_schema.sql`，RAG 向量表需要 `sql/pgvector_rag_schema.sql`。
+- Nginx 502：确认当前只启动了一套后端 profile，并等待后端 `/health` 通过。
+- WebSocket 失败：确认使用 Spring AI 后端套件时 `/ws/ai/realtime-asr` 可达，并检查 `DASHSCOPE_API_KEY` 或 Realtime 配置。
+- AI Key 缺失：检查 `.env` 或 `.env.docker` 中的 `OPENAI_*_API_KEY`、`DASHSCOPE_API_KEY` 是否仍是占位值。
+
 ### 启动数据库
 
 本地数据库容器统一复用 `spring-ai-backend/docker-compose.yml`。
@@ -107,7 +203,7 @@ docker compose up -d
 默认连接信息：
 
 - MySQL：`127.0.0.1:3306`，库名 `resume-builder`，用户 `root`，密码 `root`
-- PostgreSQL + pgvector：`127.0.0.1:5432`，库名 `resume_builder_vector`，用户 `postgres`，密码 `postgres`
+- PostgreSQL + pgvector：`127.0.0.1:5433`，库名 `resume-builder`，用户 `pgvector`，密码 `pgvector`
 
 ### 导入 MySQL 和 pgvector 数据库文件
 
@@ -115,22 +211,27 @@ docker compose up -d
 
 - `sql/interview_schema.sql`：MySQL 面试会话表和消息表，Spring / Python 后端共用。
 - `sql/pgvector_rag_schema.sql`：PostgreSQL + pgvector 的 `rag_document_chunks` 表，Spring / Python 后端共用。
-- `sql/create_pgvector_resume_builder_database.sql`：手工创建 pgvector 数据库时的辅助脚本，Docker Compose 默认已创建 `resume_builder_vector`，通常不需要执行。
+- `sql/mysql_database_schema.sql`：Docker 初始化 MySQL 数据库时使用，只负责创建 `resume-builder` 数据库。
+- `sql/create_pgvector_resume_builder_database.sql`：手工创建 pgvector 数据库时的辅助脚本，Docker Compose 默认已创建 `resume-builder`，通常不需要执行。
 
 在 `spring-ai-backend/` 目录执行以下命令。
 
 PowerShell：
 
 ```powershell
+Get-Content -Raw ..\sql\mysql_database_schema.sql | docker exec -i spring-ai-mysql mysql -uroot -proot
 Get-Content -Raw ..\sql\interview_schema.sql | docker exec -i spring-ai-mysql mysql -uroot -proot resume-builder
-Get-Content -Raw ..\sql\pgvector_rag_schema.sql | docker exec -i spring-ai-pgvector psql -U postgres -d resume_builder_vector
+Get-Content -Raw ..\sql\create_pgvector_resume_builder_database.sql | docker exec -i spring-ai-pgvector psql -v ON_ERROR_STOP=1 -U pgvector -d postgres
+Get-Content -Raw ..\sql\pgvector_rag_schema.sql | docker exec -i spring-ai-pgvector psql -U pgvector -d resume-builder
 ```
 
 cmd / Git Bash：
 
 ```bash
+docker exec -i spring-ai-mysql mysql -uroot -proot < ../sql/mysql_database_schema.sql
 docker exec -i spring-ai-mysql mysql -uroot -proot resume-builder < ../sql/interview_schema.sql
-docker exec -i spring-ai-pgvector psql -U postgres -d resume_builder_vector < ../sql/pgvector_rag_schema.sql
+docker exec -i spring-ai-pgvector psql -v ON_ERROR_STOP=1 -U pgvector -d postgres < ../sql/create_pgvector_resume_builder_database.sql
+docker exec -i spring-ai-pgvector psql -U pgvector -d resume-builder < ../sql/pgvector_rag_schema.sql
 ```
 
 注意：
@@ -419,13 +520,13 @@ Spring AI：
 
 ```dotenv
 # PostgreSQL JDBC URL，固定用于 RAG 向量库。
-PGVECTOR_DATASOURCE_URL=jdbc:postgresql://127.0.0.1:5432/resume_builder_vector
+PGVECTOR_DATASOURCE_URL=jdbc:postgresql://127.0.0.1:5433/resume-builder
 
 # PostgreSQL 用户名。
-PGVECTOR_DATASOURCE_USERNAME=postgres
+PGVECTOR_DATASOURCE_USERNAME=pgvector
 
 # PostgreSQL 密码。
-PGVECTOR_DATASOURCE_PASSWORD=postgres
+PGVECTOR_DATASOURCE_PASSWORD=pgvector
 
 # PostgreSQL JDBC Driver。
 PGVECTOR_DATASOURCE_DRIVER_CLASS_NAME=org.postgresql.Driver
@@ -438,13 +539,13 @@ Python AI Backend：
 
 ```dotenv
 # SQLAlchemy PostgreSQL URL，固定用于 RAG 向量库。
-PGVECTOR_DATASOURCE_URL=postgresql+psycopg://postgres:postgres@127.0.0.1:5432/resume_builder_vector
+PGVECTOR_DATASOURCE_URL=postgresql+psycopg://pgvector:pgvector@127.0.0.1:5433/resume-builder
 
 # PostgreSQL 用户名。
-PGVECTOR_DATASOURCE_USERNAME=postgres
+PGVECTOR_DATASOURCE_USERNAME=pgvector
 
 # PostgreSQL 密码。
-PGVECTOR_DATASOURCE_PASSWORD=postgres
+PGVECTOR_DATASOURCE_PASSWORD=pgvector
 
 # pgvector 连接超时时间。
 PGVECTOR_CONNECT_TIMEOUT_SECONDS=8
@@ -550,16 +651,27 @@ start-python-backend.bat
 # 停止占用 8999 的 Python 后端进程
 .\stop-python-backend.ps1 -Port 8999
 
-# 启动 MySQL + pgvector
-cd spring-ai-backend
-docker compose up -d
+# Docker 一键启动 Spring AI 套件
+.\start-docker-spring-ai.bat
+
+# Docker 一键启动 Python AI 套件
+.\start-docker-python-ai.bat
+
+# 停止 Docker stack，不删除数据卷
+.\stop-docker-stack.bat
+
+# Docker Compose 直接启动 Spring AI 套件（仅适合 3306/5433 未被宿主机占用）
+docker compose --profile spring-ai up --build -d
+
+# Docker Compose 直接启动 Python AI 套件（仅适合 3306/5433 未被宿主机占用）
+docker compose --profile python-ai up --build -d
 
 # 启动 Spring AI 后端
 cd spring-ai-backend
 mvn spring-boot:run
 
 # 仅容器部署前端静态站点
-docker compose up --build -d
+docker compose --profile frontend-only up --build -d
 ```
 
 ## 目录结构

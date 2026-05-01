@@ -1,3 +1,5 @@
+# author: jf
+
 node_modules
 dist
 dist-ssr
@@ -13,3 +15,11 @@ dist-ssr
 .env.*
 .eslintcache
 *.tsbuildinfo
+
+# 前端镜像不需要复制后端工程和工作流产物。
+spring-ai-backend
+python-ai-backend
+.workflow
+docs
+sql
+screenshots

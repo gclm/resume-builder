@@ -1,0 +1,10 @@
+# author: jf
+
+target
+.env
+.env.*
+.idea
+.vscode
+*.log
+*.tmp
+.DS_Store

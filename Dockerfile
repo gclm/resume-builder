@@ -1,28 +1,28 @@
+ARG NODE_IMAGE=node:22-alpine
 ARG NGINX_IMAGE=nginx:alpine
 
-# Stage 1: Build
-FROM node:22-alpine AS build
+# author: jf
+
+# 构建阶段只生成前端静态资源。
+FROM ${NODE_IMAGE} AS build
 
 WORKDIR /app
 
-# Copy dependency files first for better layer caching
+# 先复制依赖清单，提升 Docker 层缓存命中率。
 COPY package.json package-lock.json ./
 
 RUN npm ci
 
-# Copy source code
+# 再复制前端源码并执行构建。
 COPY . .
 
-# Build the app (skip type-check for faster builds)
 RUN npm run build-only
 
-# Stage 2: Serve with Nginx
+# 运行阶段使用 Nginx 托管静态资源并代理后端。
 FROM ${NGINX_IMAGE}
 
-# Copy custom nginx config
 COPY nginx.conf /etc/nginx/conf.d/default.conf
 
-# Copy built assets from build stage
 COPY --from=build /app/dist /usr/share/nginx/html
 
 EXPOSE 80

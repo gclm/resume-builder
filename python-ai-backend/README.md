@@ -35,8 +35,10 @@ docker compose up -d
 在 `spring-ai-backend/` 目录执行：
 
 ```bash
+docker exec -i spring-ai-mysql mysql -uroot -proot < ../sql/mysql_database_schema.sql
 docker exec -i spring-ai-mysql mysql -uroot -proot resume-builder < ../sql/interview_schema.sql
-docker exec -i spring-ai-pgvector psql -U postgres -d resume_builder_vector < ../sql/pgvector_rag_schema.sql
+docker exec -i spring-ai-pgvector psql -v ON_ERROR_STOP=1 -U pgvector -d postgres < ../sql/create_pgvector_resume_builder_database.sql
+docker exec -i spring-ai-pgvector psql -U pgvector -d resume-builder < ../sql/pgvector_rag_schema.sql
 ```
 
 ### 3. 准备环境变量
@@ -66,9 +68,9 @@ MYSQL_DATASOURCE_URL=mysql+pymysql://root:root@127.0.0.1:3306/resume-builder
 MYSQL_DATASOURCE_USERNAME=root
 MYSQL_DATASOURCE_PASSWORD=root
 
-PGVECTOR_DATASOURCE_URL=postgresql+psycopg://postgres:postgres@127.0.0.1:5432/resume_builder_vector
-PGVECTOR_DATASOURCE_USERNAME=postgres
-PGVECTOR_DATASOURCE_PASSWORD=postgres
+PGVECTOR_DATASOURCE_URL=postgresql+psycopg://pgvector:pgvector@127.0.0.1:5433/resume-builder
+PGVECTOR_DATASOURCE_USERNAME=pgvector
+PGVECTOR_DATASOURCE_PASSWORD=pgvector
 ```
 
 ### 4. 安装依赖

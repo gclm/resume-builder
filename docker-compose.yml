@@ -1,11 +1,217 @@
+# author: jf
+
+# Profile 契约：
+# - frontend-only：仅托管构建后的 Vue 前端。
+# - spring-ai：前端 + Spring AI 后端 + MySQL + pgvector；启动脚本可按外部连接配置跳过 pgvector。
+# - python-ai：前端 + Python AI Backend + MySQL + pgvector；启动脚本可按外部连接配置跳过 pgvector。
+# spring-ai 与 python-ai 是互斥套件，不能同时启动。
+x-profile-contract:
+  frontend-only: "frontend static site only"
+  spring-ai: "frontend + spring-ai-backend + mysql + optional pgvector"
+  python-ai: "frontend + python-ai-backend + mysql + optional pgvector"
+
+x-common-ai-env: &common-ai-env
+  APP_RAG_TOP_K: "${APP_RAG_TOP_K:-5}"
+  APP_INTERVIEW_RAG_TOP_K: "${APP_INTERVIEW_RAG_TOP_K:-4}"
+  APP_INTERVIEW_RAG_SIMILARITY_THRESHOLD: "${APP_INTERVIEW_RAG_SIMILARITY_THRESHOLD:-0.5}"
+  APP_INTERVIEW_RAG_TIMEOUT_SECONDS: "${APP_INTERVIEW_RAG_TIMEOUT_SECONDS:-3}"
+  OPENAI_BASE_URL: "${OPENAI_BASE_URL:-https://api.openai.com}"
+  OPENAI_API_KEY: "${OPENAI_API_KEY:-your_api_key_here}"
+  OPENAI_CHAT_BASE_URL: "${OPENAI_CHAT_BASE_URL:-https://api.openai.com}"
+  OPENAI_CHAT_API_KEY: "${OPENAI_CHAT_API_KEY:-your_chat_api_key_here}"
+  OPENAI_CHAT_COMPLETIONS_PATH: "${OPENAI_CHAT_COMPLETIONS_PATH:-/v1/chat/completions}"
+  OPENAI_CHAT_MODEL: "${OPENAI_CHAT_MODEL:-gpt-5.4}"
+  OPENAI_CHAT_TIMEOUT_SECONDS: "${OPENAI_CHAT_TIMEOUT_SECONDS:-25}"
+  EMBEDDING_PROVIDER: "${EMBEDDING_PROVIDER:-openai}"
+  EMBEDDING_DIMENSIONS: "${EMBEDDING_DIMENSIONS:-0}"
+  OPENAI_EMBEDDING_BASE_URL: "${OPENAI_EMBEDDING_BASE_URL:-https://api.openai.com}"
+  OPENAI_EMBEDDING_API_KEY: "${OPENAI_EMBEDDING_API_KEY:-your_embedding_api_key_here}"
+  OPENAI_EMBEDDINGS_PATH: "${OPENAI_EMBEDDINGS_PATH:-/v1/embeddings}"
+  OPENAI_EMBEDDING_MODEL: "${OPENAI_EMBEDDING_MODEL:-text-embedding-3-large}"
+  OPENAI_EMBEDDING_TIMEOUT_SECONDS: "${OPENAI_EMBEDDING_TIMEOUT_SECONDS:-20}"
+  OLLAMA_EMBEDDING_BASE_URL: "${OLLAMA_EMBEDDING_BASE_URL:-http://host.docker.internal:11434}"
+  OLLAMA_EMBEDDING_MODEL: "${OLLAMA_EMBEDDING_MODEL:-nomic-embed-text}"
+  OLLAMA_EMBEDDING_TIMEOUT_SECONDS: "${OLLAMA_EMBEDDING_TIMEOUT_SECONDS:-45}"
+  OPENAI_VISION_BASE_URL: "${OPENAI_VISION_BASE_URL:-https://api.openai.com}"
+  OPENAI_VISION_API_KEY: "${OPENAI_VISION_API_KEY:-your_vision_api_key_here}"
+  OPENAI_VISION_CHAT_COMPLETIONS_PATH: "${OPENAI_VISION_CHAT_COMPLETIONS_PATH:-/v1/chat/completions}"
+  OPENAI_VISION_MODEL: "${OPENAI_VISION_MODEL:-gpt-4.1}"
+  OPENAI_VISION_TIMEOUT_SECONDS: "${OPENAI_VISION_TIMEOUT_SECONDS:-40}"
+  OPENAI_VISION_DETAIL: "${OPENAI_VISION_DETAIL:-high}"
+  OPENAI_REALTIME_BASE_URL: "${OPENAI_REALTIME_BASE_URL:-https://api.openai.com}"
+  OPENAI_REALTIME_API_KEY: "${OPENAI_REALTIME_API_KEY:-your_realtime_api_key_here}"
+  OPENAI_REALTIME_CLIENT_SECRETS_PATH: "${OPENAI_REALTIME_CLIENT_SECRETS_PATH:-/v1/realtime/client_secrets}"
+  OPENAI_REALTIME_CALLS_PATH: "${OPENAI_REALTIME_CALLS_PATH:-/v1/realtime/calls}"
+  OPENAI_REALTIME_TRANSCRIPTION_MODEL: "${OPENAI_REALTIME_TRANSCRIPTION_MODEL:-gpt-4o-transcribe}"
+  OPENAI_REALTIME_LANGUAGE: "${OPENAI_REALTIME_LANGUAGE:-zh}"
+  OPENAI_REALTIME_TIMEOUT_SECONDS: "${OPENAI_REALTIME_TIMEOUT_SECONDS:-120}"
+  RAG_CHUNK_SIZE: "${RAG_CHUNK_SIZE:-700}"
+  RAG_CHUNK_OVERLAP: "${RAG_CHUNK_OVERLAP:-70}"
+  RAG_MAX_FILE_SIZE_MB: "${RAG_MAX_FILE_SIZE_MB:-10}"
+  AUTOGEN_ENABLED: "${AUTOGEN_ENABLED:-false}"
+
 services:
   resume-builder:
+    profiles:
+      - frontend-only
+      - spring-ai
+      - python-ai
     build:
       context: .
       dockerfile: Dockerfile
       args:
-        NGINX_IMAGE: ${NGINX_IMAGE:-nginx:alpine}
+        NODE_IMAGE: "${NODE_IMAGE:-node:22-alpine}"
+        NGINX_IMAGE: "${NGINX_IMAGE:-nginx:alpine}"
     ports:
-      - "3000:80"
+      - "${FRONTEND_PORT:-3000}:80"
     restart: unless-stopped
     container_name: resume-builder
+    networks:
+      - resume-builder-network
+
+  mysql:
+    profiles:
+      - spring-ai
+      - python-ai
+    image: "${MYSQL_IMAGE:-mysql:8.4}"
+    container_name: resume-builder-mysql
+    restart: unless-stopped
+    environment:
+      MYSQL_DATABASE: "${MYSQL_DATABASE:-resume-builder}"
+      MYSQL_ROOT_PASSWORD: "${MYSQL_ROOT_PASSWORD:-root}"
+      TZ: Asia/Shanghai
+    ports:
+      - "${MYSQL_PORT:-3306}:3306"
+    healthcheck:
+      test: ["CMD-SHELL", "mysqladmin ping -h localhost -uroot -p$${MYSQL_ROOT_PASSWORD}"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+    volumes:
+      - mysql_data:/var/lib/mysql
+    networks:
+      - resume-builder-network
+
+  pgvector:
+    profiles:
+      - "${PGVECTOR_PROFILE_SPRING_AI:-spring-ai}"
+      - "${PGVECTOR_PROFILE_PYTHON_AI:-python-ai}"
+    image: "${PGVECTOR_IMAGE:-pgvector/pgvector:pg17}"
+    container_name: resume-builder-pgvector
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: "${POSTGRES_DB:-resume-builder}"
+      POSTGRES_USER: "${POSTGRES_USER:-pgvector}"
+      POSTGRES_PASSWORD: "${POSTGRES_PASSWORD:-pgvector}"
+      TZ: Asia/Shanghai
+    ports:
+      - "${PGVECTOR_PORT:-5433}:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+    volumes:
+      - pgvector_data:/var/lib/postgresql/data
+    networks:
+      - resume-builder-network
+
+  spring-ai-backend:
+    profiles:
+      - spring-ai
+    build:
+      context: ./spring-ai-backend
+      dockerfile: Dockerfile
+      args:
+        MAVEN_IMAGE: "${MAVEN_IMAGE:-maven:3.9.9-eclipse-temurin-21}"
+        JRE_IMAGE: "${JRE_IMAGE:-eclipse-temurin:21-jre-alpine}"
+    container_name: resume-builder-spring-ai-backend
+    restart: unless-stopped
+    environment:
+      <<: *common-ai-env
+      SERVER_PORT: "${SERVER_PORT:-8999}"
+      APP_CORS_ALLOWED_ORIGINS: "${APP_CORS_ALLOWED_ORIGINS:-http://localhost:3000,http://127.0.0.1:3000,http://localhost:5173,http://127.0.0.1:5173}"
+      REALTIME_ASR_PROVIDER: "${REALTIME_ASR_PROVIDER:-dashscope}"
+      DASHSCOPE_API_KEY: "${DASHSCOPE_API_KEY:-your_dashscope_api_key_here}"
+      DASHSCOPE_REALTIME_BASE_URL: "${DASHSCOPE_REALTIME_BASE_URL:-wss://dashscope.aliyuncs.com/api-ws/v1/realtime}"
+      DASHSCOPE_REALTIME_MODEL: "${DASHSCOPE_REALTIME_MODEL:-qwen3-asr-flash-realtime}"
+      DASHSCOPE_REALTIME_LANGUAGE: "${DASHSCOPE_REALTIME_LANGUAGE:-zh}"
+      DASHSCOPE_REALTIME_SAMPLE_RATE: "${DASHSCOPE_REALTIME_SAMPLE_RATE:-16000}"
+      DASHSCOPE_REALTIME_VAD_THRESHOLD: "${DASHSCOPE_REALTIME_VAD_THRESHOLD:-0.2}"
+      DASHSCOPE_REALTIME_VAD_SILENCE_DURATION_MS: "${DASHSCOPE_REALTIME_VAD_SILENCE_DURATION_MS:-800}"
+      DASHSCOPE_REALTIME_OPEN_TIMEOUT_SECONDS: "${DASHSCOPE_REALTIME_OPEN_TIMEOUT_SECONDS:-10}"
+      MYSQL_DATASOURCE_URL: "${SPRING_MYSQL_DATASOURCE_URL:-jdbc:mysql://mysql:3306/resume-builder?useUnicode=true&characterEncoding=UTF-8&serverTimezone=Asia/Shanghai&useSSL=false&allowPublicKeyRetrieval=true}"
+      MYSQL_DATASOURCE_USERNAME: "${MYSQL_DATASOURCE_USERNAME:-root}"
+      MYSQL_DATASOURCE_PASSWORD: "${MYSQL_DATASOURCE_PASSWORD:-root}"
+      PGVECTOR_DATASOURCE_URL: "${SPRING_PGVECTOR_DATASOURCE_URL:-jdbc:postgresql://pgvector:5432/resume-builder}"
+      PGVECTOR_DATASOURCE_USERNAME: "${PGVECTOR_DATASOURCE_USERNAME:-pgvector}"
+      PGVECTOR_DATASOURCE_PASSWORD: "${PGVECTOR_DATASOURCE_PASSWORD:-pgvector}"
+      PGVECTOR_DATASOURCE_DRIVER_CLASS_NAME: "${PGVECTOR_DATASOURCE_DRIVER_CLASS_NAME:-org.postgresql.Driver}"
+      PGVECTOR_CONNECT_TIMEOUT_SECONDS: "${PGVECTOR_CONNECT_TIMEOUT_SECONDS:-8}"
+    depends_on:
+      mysql:
+        condition: service_healthy
+      pgvector:
+        condition: service_healthy
+        required: false
+    ports:
+      - "${BACKEND_PORT:-8999}:8999"
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:$${SERVER_PORT}/health || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 20
+      start_period: 40s
+    networks:
+      resume-builder-network:
+        aliases:
+          - backend
+
+  python-ai-backend:
+    profiles:
+      - python-ai
+    build:
+      context: ./python-ai-backend
+      dockerfile: Dockerfile
+      args:
+        PYTHON_IMAGE: "${PYTHON_IMAGE:-python:3.11-slim}"
+        INSTALL_OPTIONAL_AI_DEPS: "${INSTALL_PYTHON_OPTIONAL_AI_DEPS:-true}"
+    container_name: resume-builder-python-ai-backend
+    restart: unless-stopped
+    environment:
+      <<: *common-ai-env
+      SERVER_PORT: "${SERVER_PORT:-8999}"
+      APP_CORS_ALLOWED_ORIGINS: "${APP_CORS_ALLOWED_ORIGINS:-http://localhost:3000,http://127.0.0.1:3000,http://localhost:5173,http://127.0.0.1:5173}"
+      MYSQL_DATASOURCE_URL: "${PYTHON_MYSQL_DATASOURCE_URL:-mysql+pymysql://root:root@mysql:3306/resume-builder}"
+      MYSQL_DATASOURCE_USERNAME: "${MYSQL_DATASOURCE_USERNAME:-root}"
+      MYSQL_DATASOURCE_PASSWORD: "${MYSQL_DATASOURCE_PASSWORD:-root}"
+      PGVECTOR_DATASOURCE_URL: "${PYTHON_PGVECTOR_DATASOURCE_URL:-postgresql+psycopg://pgvector:pgvector@pgvector:5432/resume-builder}"
+      PGVECTOR_DATASOURCE_USERNAME: "${PGVECTOR_DATASOURCE_USERNAME:-pgvector}"
+      PGVECTOR_DATASOURCE_PASSWORD: "${PGVECTOR_DATASOURCE_PASSWORD:-pgvector}"
+      PGVECTOR_CONNECT_TIMEOUT_SECONDS: "${PGVECTOR_CONNECT_TIMEOUT_SECONDS:-8}"
+    depends_on:
+      mysql:
+        condition: service_healthy
+      pgvector:
+        condition: service_healthy
+        required: false
+    ports:
+      - "${BACKEND_PORT:-8999}:8999"
+    healthcheck:
+      test: ["CMD-SHELL", "python -c \"import os, urllib.request; urllib.request.urlopen('http://127.0.0.1:%s/health' % os.environ.get('SERVER_PORT', '8999'), timeout=3)\""]
+      interval: 10s
+      timeout: 5s
+      retries: 20
+      start_period: 20s
+    networks:
+      resume-builder-network:
+        aliases:
+          - backend
+
+networks:
+  resume-builder-network:
+    name: resume-builder-network
+
+volumes:
+  mysql_data:
+  pgvector_data:

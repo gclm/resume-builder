@@ -6,7 +6,7 @@ import org.springframework.boot.context.properties.ConfigurationProperties;
 @ConfigurationProperties(prefix = "app.pgvector")
 public class PgVectorProperties {
 
-    private String url = "jdbc:postgresql://localhost:5433/resume_builder_vector";
+    private String url = "jdbc:postgresql://localhost:5433/resume-builder";
     private String username = "pgvector";
     private String password = "pgvector";
     private String driverClassName = "org.postgresql.Driver";

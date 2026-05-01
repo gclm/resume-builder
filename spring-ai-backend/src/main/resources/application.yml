@@ -82,9 +82,9 @@ app:
     password: ${MYSQL_DATASOURCE_PASSWORD:root}
     driver-class-name: ${MYSQL_DATASOURCE_DRIVER_CLASS_NAME:com.mysql.cj.jdbc.Driver}
   pgvector:
-    url: ${PGVECTOR_DATASOURCE_URL:jdbc:postgresql://127.0.0.1:5432/resume_builder_vector}
-    username: ${PGVECTOR_DATASOURCE_USERNAME:postgres}
-    password: ${PGVECTOR_DATASOURCE_PASSWORD:postgres}
+    url: ${PGVECTOR_DATASOURCE_URL:jdbc:postgresql://127.0.0.1:5433/resume-builder}
+    username: ${PGVECTOR_DATASOURCE_USERNAME:pgvector}
+    password: ${PGVECTOR_DATASOURCE_PASSWORD:pgvector}
     driver-class-name: ${PGVECTOR_DATASOURCE_DRIVER_CLASS_NAME:org.postgresql.Driver}
     connect-timeout-seconds: ${PGVECTOR_CONNECT_TIMEOUT_SECONDS:8}
 

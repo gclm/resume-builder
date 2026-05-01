@@ -30,9 +30,9 @@ OPENAI_API_KEY=your_api_key_here
 MYSQL_DATASOURCE_URL=jdbc:mysql://127.0.0.1:3306/resume-builder?useUnicode=true&characterEncoding=UTF-8&serverTimezone=Asia/Shanghai&useSSL=false&allowPublicKeyRetrieval=true
 MYSQL_DATASOURCE_USERNAME=root
 MYSQL_DATASOURCE_PASSWORD=root
-PGVECTOR_DATASOURCE_URL=jdbc:postgresql://127.0.0.1:5432/resume_builder_vector
-PGVECTOR_DATASOURCE_USERNAME=postgres
-PGVECTOR_DATASOURCE_PASSWORD=postgres
+PGVECTOR_DATASOURCE_URL=jdbc:postgresql://127.0.0.1:5433/resume-builder
+PGVECTOR_DATASOURCE_USERNAME=pgvector
+PGVECTOR_DATASOURCE_PASSWORD=pgvector
 SERVER_PORT=8999
 APP_CORS_ALLOWED_ORIGINS=http://localhost:5173
 ```
@@ -50,12 +50,16 @@ docker compose up -d
 在 `spring-ai-backend/` 目录执行：
 
 ```bash
+docker exec -i spring-ai-mysql mysql -uroot -proot < ../sql/mysql_database_schema.sql
 docker exec -i spring-ai-mysql mysql -uroot -proot resume-builder < ../sql/interview_schema.sql
+docker exec -i spring-ai-pgvector psql -v ON_ERROR_STOP=1 -U pgvector -d postgres < ../sql/create_pgvector_resume_builder_database.sql
+docker exec -i spring-ai-pgvector psql -U pgvector -d resume-builder < ../sql/pgvector_rag_schema.sql
 ```
 
 说明：
 
-- MySQL 面试会话表仍需要开发者手工执行 `../sql/interview_schema.sql`。
+- 使用仓库根目录的一键启动脚本时，Docker 数据库容器会自动执行这些 SQL。
+- 直接在本目录执行 `docker compose up -d` 时，仍需要开发者手工执行这些 SQL。
 - Spring 后端禁止自动建表，启动前必须手工执行 `../sql/pgvector_rag_schema.sql` 创建 `rag_document_chunks`。
 - 如果数据库里已有 `rag_vector_store_qwen3_embedding_0_6b` 或旧结构 `rag_document_chunks`，且可以丢弃现有 RAG 向量数据，可先手工执行 `../sql/spring_ai_rag_table_cleanup.sql`，再执行 `../sql/pgvector_rag_schema.sql`，最后重启 Spring 后端。
 
@@ -80,9 +84,9 @@ OPENAI_API_KEY=your_api_key_here
 MYSQL_DATASOURCE_URL=jdbc:mysql://127.0.0.1:3306/resume-builder?useUnicode=true&characterEncoding=UTF-8&serverTimezone=Asia/Shanghai&useSSL=false&allowPublicKeyRetrieval=true
 MYSQL_DATASOURCE_USERNAME=root
 MYSQL_DATASOURCE_PASSWORD=root
-PGVECTOR_DATASOURCE_URL=jdbc:postgresql://127.0.0.1:5432/resume_builder_vector
-PGVECTOR_DATASOURCE_USERNAME=postgres
-PGVECTOR_DATASOURCE_PASSWORD=postgres
+PGVECTOR_DATASOURCE_URL=jdbc:postgresql://127.0.0.1:5433/resume-builder
+PGVECTOR_DATASOURCE_USERNAME=pgvector
+PGVECTOR_DATASOURCE_PASSWORD=pgvector
 SERVER_PORT=8999
 APP_CORS_ALLOWED_ORIGINS=http://localhost:5173
 ```

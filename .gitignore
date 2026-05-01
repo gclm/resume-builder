@@ -51,3 +51,6 @@ code-review/
 
 # requirements artifacts
 docs/requirements/
+
+# Workflow
+.workflow
