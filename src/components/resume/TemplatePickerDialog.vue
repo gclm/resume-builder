@@ -1,4 +1,5 @@
 <script setup lang="ts">
+// author: jf
 import { ref } from 'vue'
 import type { ResumeTemplateDefinition, ResumeTemplateKey } from '@/templates/resume'
 
@@ -85,7 +86,7 @@ function resolvePreviewImageSrc(value: string): string {
   position: fixed;
   inset: 0;
   background: rgba(30, 20, 10, 0.28);
-  z-index: 40;
+  z-index: 1000;
   display: flex;
   justify-content: center;
   align-items: center;
@@ -216,5 +217,48 @@ function resolvePreviewImageSrc(value: string): string {
   font-weight: 700;
   display: inline-flex;
   align-items: center;
+}
+
+@media (max-width: 720px) {
+  .template-picker-mask {
+    align-items: flex-end;
+    padding: 10px;
+  }
+
+  .template-picker-dialog {
+    width: 100%;
+    max-height: min(86dvh, 760px);
+    border-radius: 18px;
+  }
+
+  .template-picker-head {
+    height: 52px;
+    padding: 0 14px;
+  }
+
+  .template-picker-close {
+    min-width: 60px;
+    height: 34px;
+  }
+
+  .template-picker-list {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 10px;
+    padding: 12px;
+  }
+
+  .template-picker-item {
+    padding: 8px;
+  }
+
+  .template-name {
+    font-size: 13px;
+  }
+}
+
+@media (max-width: 420px) {
+  .template-picker-list {
+    grid-template-columns: 1fr;
+  }
 }
 </style>

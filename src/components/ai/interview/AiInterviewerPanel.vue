@@ -64,6 +64,7 @@ const aiConfigStore = useAiConfigStore()
 
 type SpeechEngine = 'realtime' | 'browser'
 type SpeechUiState = Exclude<SpeechRuntimeState, 'closed'> | 'idle'
+type FloatingPanel = 'mode' | 'controls'
 
 const BACKEND_SPEECH_AUTO_DISABLE_THRESHOLD = 2
 
@@ -76,6 +77,8 @@ const isLoading = ref(false)
 const isListening = ref(false)
 const showResumePreview = ref(false)
 const showAiConfig = ref(false)
+const activeFloatingPanel = ref<FloatingPanel | null>(null)
+const floatingActionsRef = ref<HTMLElement | null>(null)
 const errorMsg = ref('')
 const inputText = ref('')
 const finalEvaluation = ref<FinalEvaluation | null>(null)
@@ -104,6 +107,12 @@ const timerStatusText = computed(() => {
   if (remainingSeconds.value === 0) return TEXT.statusFinished
   return timerRunning.value ? TEXT.statusRunning : TEXT.statusPaused
 })
+const interviewStatusText = computed(() => {
+  if (!sessionStarted.value) return TEXT.statusNotStarted
+  if (sessionFinished.value || remainingSeconds.value === 0) return TEXT.statusFinished
+  return TEXT.statusRunning
+})
+const pauseButtonLabel = computed(() => (timerRunning.value ? '暂停' : '继续'))
 const assistantTurns = computed(() => messages.value.filter((item) => item.role === 'assistant').length)
 const userTurns = computed(() => messages.value.filter((item) => item.role === 'user').length)
 const currentRound = computed(() => Math.max(assistantTurns.value, userTurns.value))
@@ -114,7 +123,6 @@ const canFinish = computed(() => sessionStarted.value && !isLoading.value && !se
 const canToggleVoice = computed(
   () => sessionStarted.value && !sessionFinished.value && !isLoading.value && speechUiState.value !== 'transcribing'
 )
-const configBadgeText = computed(() => '\u8bed\u97f3\u914d\u7f6e')
 const configTooltipText = computed(() => '\u8bed\u97f3\u914d\u7f6e')
 const historyRefreshText = computed(() => (loadingSessionHistory.value ? TEXT.historyLoading : TEXT.historyRefresh))
 const speechStatusText = computed(() => {
@@ -744,7 +752,30 @@ function handleGlobalKeydown(event: KeyboardEvent) {
 }
 
 function handleOpenAiConfig() {
+  activeFloatingPanel.value = null
   showAiConfig.value = true
+}
+
+function toggleFloatingPanel(panel: FloatingPanel) {
+  activeFloatingPanel.value = activeFloatingPanel.value === panel ? null : panel
+}
+
+function handleFloatingModeSwitch(nextMode: InterviewMode) {
+  handleModeSwitch(nextMode)
+  activeFloatingPanel.value = null
+}
+
+function handleFloatingResumeToggle() {
+  showResumePreview.value = !showResumePreview.value
+  activeFloatingPanel.value = null
+}
+
+function handleDocumentPointerDown(event: MouseEvent) {
+  const target = event.target as Node | null
+  if (!target || !floatingActionsRef.value) return
+  if (!floatingActionsRef.value.contains(target)) {
+    activeFloatingPanel.value = null
+  }
 }
 
 watch(remainingSeconds, (value) => {
@@ -759,6 +790,7 @@ watch(remainingSeconds, (value) => {
 onMounted(() => {
   void initializeSessionHistory()
   window.addEventListener('keydown', handleGlobalKeydown)
+  document.addEventListener('mousedown', handleDocumentPointerDown)
   ticker = setInterval(() => {
     if (!sessionStarted.value || !timerRunning.value) return
     if (remainingSeconds.value <= 0) return
@@ -768,6 +800,7 @@ onMounted(() => {
 
 onUnmounted(() => {
   window.removeEventListener('keydown', handleGlobalKeydown)
+  document.removeEventListener('mousedown', handleDocumentPointerDown)
   if (ticker) {
     clearInterval(ticker)
     ticker = null
@@ -779,52 +812,42 @@ onUnmounted(() => {
 <template>
   <section class="ai-interviewer-panel">
     <header class="topbar">
-      <div class="role-switch">
-        <button type="button" class="mode-btn" :class="{ active: mode === 'candidate' }" @click="handleModeSwitch('candidate')">
-          {{ TEXT.modeCandidate }}
-        </button>
-        <button
-          type="button"
-          class="mode-btn"
-          :class="{ active: mode === 'interviewer' }"
-          @click="handleModeSwitch('interviewer')"
-        >
-          {{ TEXT.modeInterviewer }}
-        </button>
-      </div>
-
-      <div class="top-actions">
-        <button
-          class="config-btn"
-          type="button"
-          :title="configTooltipText"
-          :data-model-tooltip="configTooltipText"
-          @click="handleOpenAiConfig"
-        >
-          <svg class="icon-xs" viewBox="0 0 24 24" aria-hidden="true">
-            <circle cx="12" cy="12" r="3" />
-            <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z" />
-          </svg>
-          <span class="config-btn-text">{{ configBadgeText }}</span>
-        </button>
-        <select
-          v-model="selectedSessionId"
-          class="history-select"
-          :disabled="loadingSessionHistory"
-          @change="handleSessionSelectionChange"
-        >
-          <option value="">{{ TEXT.historyPlaceholder }}</option>
-          <option v-for="item in sessionHistory" :key="item.sessionId" :value="item.sessionId">
-            {{ buildSessionOptionLabel(item) }}
-          </option>
-        </select>
-        <button class="top-btn" type="button" :disabled="loadingSessionHistory" @click="handleRefreshSessionHistory">
-          {{ historyRefreshText }}
-        </button>
-        <button class="top-btn" type="button" @click="showResumePreview = !showResumePreview">
-          {{ showResumePreview ? TEXT.hideResume : TEXT.showResume }}
-        </button>
-      </div>
+      <select
+        v-model="selectedSessionId"
+        class="history-select"
+        :disabled="loadingSessionHistory"
+        @change="handleSessionSelectionChange"
+      >
+        <option value="">{{ TEXT.historyPlaceholder }}</option>
+        <option v-for="item in sessionHistory" :key="item.sessionId" :value="item.sessionId">
+          {{ buildSessionOptionLabel(item) }}
+        </option>
+      </select>
+      <button
+        class="history-refresh-btn"
+        :class="{ loading: loadingSessionHistory }"
+        type="button"
+        :disabled="loadingSessionHistory"
+        :title="historyRefreshText"
+        aria-label="刷新历史"
+        :aria-busy="loadingSessionHistory"
+        @click="handleRefreshSessionHistory"
+      >
+        <svg viewBox="0 0 24 24" aria-hidden="true">
+          <path d="M20 11a8 8 0 1 0-2.34 5.66" />
+          <path d="M20 4v7h-7" />
+        </svg>
+      </button>
+      <span
+        class="interview-status-pill"
+        :class="{
+          active: sessionStarted && !sessionFinished && remainingSeconds > 0,
+          finished: sessionFinished || remainingSeconds === 0,
+        }"
+      >
+        <span class="interview-status-dot" aria-hidden="true" />
+        {{ interviewStatusText }}
+      </span>
     </header>
 
     <div v-if="finalEvaluation" class="final-banner" :class="{ pass: finalEvaluation.passed, fail: !finalEvaluation.passed }">
@@ -858,6 +881,7 @@ onUnmounted(() => {
         :timer-running="timerRunning"
         :speech-state="speechUiState"
         :speech-status-text="speechStatusText"
+        :show-controls="false"
         @update:input-text="inputText = $event"
         @start="handleStart"
         @toggle-pause="handleTogglePause"
@@ -869,6 +893,144 @@ onUnmounted(() => {
       />
 
       <ResumePreviewOverlay v-if="showResumePreview" @close="showResumePreview = false" />
+    </div>
+
+    <div ref="floatingActionsRef" class="interview-floating-tools" aria-label="AI 面试快捷操作">
+      <div class="floating-actions-stack">
+        <button
+          class="floating-action-btn"
+          type="button"
+          :title="configTooltipText"
+          :aria-label="configTooltipText"
+          @click="handleOpenAiConfig"
+        >
+          <svg viewBox="0 0 24 24" aria-hidden="true">
+            <path d="M4 17v-3" />
+            <path d="M4 10V7" />
+            <path d="M12 19v-5" />
+            <path d="M12 10V5" />
+            <path d="M20 16v-2" />
+            <path d="M20 10V6" />
+            <path d="M2.5 14h3" />
+            <path d="M10.5 10h3" />
+            <path d="M18.5 14h3" />
+          </svg>
+        </button>
+
+        <div class="floating-action-anchor">
+          <button
+            class="floating-action-btn"
+            :class="{ active: activeFloatingPanel === 'mode' }"
+            type="button"
+            title="模式切换"
+            aria-label="模式切换"
+            aria-haspopup="dialog"
+            :aria-expanded="activeFloatingPanel === 'mode'"
+            @click="toggleFloatingPanel('mode')"
+          >
+            <svg viewBox="0 0 24 24" aria-hidden="true">
+              <path d="M7 7h10" />
+              <path d="m14 4 3 3-3 3" />
+              <path d="M17 17H7" />
+              <path d="m10 14-3 3 3 3" />
+            </svg>
+          </button>
+
+          <div v-if="activeFloatingPanel === 'mode'" class="floating-popover mode-popover" role="dialog" aria-label="模式切换">
+            <p class="floating-popover-title">模式切换</p>
+            <div class="mode-option-list">
+              <button
+                type="button"
+                class="mode-option-btn"
+                :class="{ active: mode === 'candidate' }"
+                @click="handleFloatingModeSwitch('candidate')"
+              >
+                {{ TEXT.modeCandidate }}
+              </button>
+              <button
+                type="button"
+                class="mode-option-btn"
+                :class="{ active: mode === 'interviewer' }"
+                @click="handleFloatingModeSwitch('interviewer')"
+              >
+                {{ TEXT.modeInterviewer }}
+              </button>
+            </div>
+          </div>
+        </div>
+
+        <button
+          class="floating-action-btn"
+          type="button"
+          :title="showResumePreview ? TEXT.hideResume : TEXT.showResume"
+          :aria-label="showResumePreview ? TEXT.hideResume : TEXT.showResume"
+          @click="handleFloatingResumeToggle"
+        >
+          <svg viewBox="0 0 24 24" aria-hidden="true">
+            <path d="M7 3h8l4 4v14H7z" />
+            <path d="M15 3v5h4" />
+            <path d="M10 12h6" />
+            <path d="M10 16h5" />
+          </svg>
+        </button>
+
+        <div class="floating-action-anchor">
+          <button
+            class="floating-action-btn console-action-btn"
+            :class="{ active: activeFloatingPanel === 'controls' }"
+            type="button"
+            title="面试控制台"
+            aria-label="面试控制台"
+            aria-haspopup="dialog"
+            :aria-expanded="activeFloatingPanel === 'controls'"
+            @click="toggleFloatingPanel('controls')"
+          >
+            <svg viewBox="0 0 24 24" aria-hidden="true">
+              <path d="M4 6h16" />
+              <path d="M4 12h16" />
+              <path d="M4 18h16" />
+              <circle cx="8" cy="6" r="2" />
+              <circle cx="16" cy="12" r="2" />
+              <circle cx="10" cy="18" r="2" />
+            </svg>
+          </button>
+
+          <div
+            v-if="activeFloatingPanel === 'controls'"
+            class="floating-popover controls-popover"
+            role="dialog"
+            aria-label="面试控制台"
+          >
+            <div class="console-header">
+              <div>
+                <p class="floating-popover-title">面试控制台</p>
+                <p class="console-helper">调整时长并控制当前会话</p>
+              </div>
+              <span class="console-status-pill" :class="{ active: timerRunning }">{{ timerStatusText }}</span>
+            </div>
+
+            <div class="console-timer-row">
+              <span class="console-label">时长</span>
+              <button type="button" class="console-mini-btn" @click="adjustDuration(-5)">-5m</button>
+              <span class="console-timer-value">{{ timerText }}</span>
+              <button type="button" class="console-mini-btn" @click="adjustDuration(5)">+5m</button>
+            </div>
+
+            <div class="console-action-grid">
+              <button v-if="canStart" type="button" class="console-btn primary" :disabled="isLoading" @click="handleStart">
+                开始
+              </button>
+              <button v-else type="button" class="console-btn" :disabled="!canTogglePause" @click="handleTogglePause">
+                {{ pauseButtonLabel }}
+              </button>
+              <button type="button" class="console-btn ghost" :disabled="isLoading" @click="handleReset">重置</button>
+              <button type="button" class="console-btn danger console-finish-btn" :disabled="!canFinish" @click="handleFinish">
+                结束并评分
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
     </div>
 
     <AiConfigDialog v-if="showAiConfig" @close="showAiConfig = false" />
@@ -893,57 +1055,17 @@ onUnmounted(() => {
   border: 1px solid #e4d8cb;
   border-radius: 12px;
   background: #fff;
-  padding: 8px 12px;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-}
-
-.role-switch {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-}
-
-.mode-btn {
-  border-radius: 8px;
-  border: 1px solid #dfd2c2;
-  background: #f7f3ee;
-  color: #625649;
-  font-size: 12px;
-  font-weight: 700;
-  padding: 7px 12px;
-  cursor: pointer;
-}
-
-.mode-btn.active {
-  border-color: #1f1c17;
-  background: #1f1c17;
-  color: #fff;
-}
-
-.top-actions {
-  display: flex;
+  padding: 10px 12px;
+  display: grid;
+  grid-template-columns: minmax(220px, 1fr) 34px auto;
   align-items: center;
   gap: 8px;
 }
 
-.top-btn {
-  border: 1px solid #dfd2c2;
-  border-radius: 8px;
-  background: #f7f3ee;
-  color: #5f5448;
-  font-size: 12px;
-  font-weight: 700;
-  padding: 7px 10px;
-  cursor: pointer;
-}
-
 .history-select {
-  min-width: 220px;
-  max-width: 360px;
-  height: 30px;
+  width: 100%;
+  min-width: 0;
+  height: 34px;
   border: 1px solid #dfd2c2;
   border-radius: 8px;
   background: #fff;
@@ -956,48 +1078,87 @@ onUnmounted(() => {
   opacity: 0.65;
 }
 
-.config-btn {
-  position: relative;
-  height: 30px;
-  padding: 0 10px;
-  border-radius: 7px;
+.history-refresh-btn {
+  width: 34px;
+  height: 34px;
+  padding: 0;
+  border-radius: 9px;
   border: 1px solid #ddd2c6;
-  background: #fff;
-  color: #5c4f44;
-  font-size: 12px;
-  font-weight: 500;
-  cursor: pointer;
+  background: #f7f3ee;
+  color: #5f5448;
   display: inline-flex;
   align-items: center;
-  gap: 5px;
-  white-space: nowrap;
-  max-width: 180px;
-  overflow: visible;
+  justify-content: center;
+  cursor: pointer;
+  transition: border-color 0.18s ease, color 0.18s ease, transform 0.18s ease;
 }
 
-.config-btn:hover {
+.history-refresh-btn:hover:not(:disabled) {
+  transform: translateY(-1px);
   border-color: #d97745;
   color: #d97745;
 }
 
-.config-btn-text {
-  flex: 1;
-  min-width: 0;
-  display: inline-block;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
+.history-refresh-btn:disabled {
+  opacity: 0.72;
+  cursor: not-allowed;
 }
 
-.icon-xs {
-  width: 14px;
-  height: 14px;
+.history-refresh-btn svg {
+  width: 17px;
+  height: 17px;
   fill: none;
   stroke: currentColor;
   stroke-width: 1.9;
   stroke-linecap: round;
   stroke-linejoin: round;
-  flex-shrink: 0;
+}
+
+.history-refresh-btn.loading svg {
+  animation: refreshSpin 0.8s linear infinite;
+}
+
+@keyframes refreshSpin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.interview-status-pill {
+  min-width: 90px;
+  height: 34px;
+  border-radius: 999px;
+  border: 1px solid #ded4c8;
+  background: #f6f1ea;
+  color: #6d6054;
+  font-size: 12px;
+  font-weight: 800;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  padding: 0 12px;
+  white-space: nowrap;
+}
+
+.interview-status-pill.active {
+  border-color: #cbe5d0;
+  background: #edf8f0;
+  color: #2b7a45;
+}
+
+.interview-status-pill.finished {
+  border-color: #efd2c4;
+  background: #fff1ec;
+  color: #b74a30;
+}
+
+.interview-status-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 999px;
+  background: currentColor;
+  box-shadow: 0 0 0 4px color-mix(in srgb, currentColor 16%, transparent);
 }
 
 .final-banner {
@@ -1034,23 +1195,340 @@ onUnmounted(() => {
   min-height: 0;
 }
 
+.interview-floating-tools {
+  position: fixed;
+  right: 24px;
+  bottom: calc(clamp(190px, 24vh, 280px) + env(safe-area-inset-bottom));
+  z-index: 260;
+  pointer-events: none;
+}
+
+.floating-actions-stack {
+  display: inline-flex;
+  flex-direction: column;
+  gap: 10px;
+  pointer-events: auto;
+}
+
+.floating-action-anchor {
+  position: relative;
+}
+
+.floating-action-btn {
+  width: 52px;
+  height: 52px;
+  padding: 0;
+  border-radius: 50%;
+  border: 1px solid #2d2521;
+  background: #2d2521;
+  color: #fff;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 12px 22px rgba(45, 37, 33, 0.24);
+  transition: transform 0.16s ease, box-shadow 0.16s ease, background-color 0.16s ease, border-color 0.16s ease;
+}
+
+.floating-action-btn:hover,
+.floating-action-btn.active {
+  transform: translateY(-1px);
+  border-color: #d97745;
+  background: #d97745;
+  box-shadow: 0 16px 28px rgba(217, 119, 69, 0.28);
+}
+
+.console-action-btn {
+  background: #2d2521;
+  border-color: #2d2521;
+}
+
+.console-action-btn:hover,
+.console-action-btn.active {
+  background: #d97745;
+  border-color: #d97745;
+}
+
+.floating-action-btn svg {
+  width: 21px;
+  height: 21px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.9;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.floating-popover {
+  position: absolute;
+  right: calc(100% + 12px);
+  bottom: 0;
+  width: min(360px, calc(100vw - 112px));
+  max-height: min(72dvh, 520px);
+  overflow: auto;
+  border: 1px solid #e1d4c6;
+  border-radius: 18px;
+  background: rgba(255, 252, 248, 0.98);
+  box-shadow: 0 22px 54px rgba(45, 37, 33, 0.2);
+  padding: 14px;
+  backdrop-filter: blur(14px);
+}
+
+.floating-popover-title {
+  color: #2d2521;
+  font-size: 14px;
+  font-weight: 800;
+}
+
+.mode-popover {
+  width: min(310px, calc(100vw - 112px));
+}
+
+.mode-option-list {
+  margin-top: 12px;
+  display: grid;
+  gap: 8px;
+}
+
+.mode-option-btn {
+  min-height: 40px;
+  border-radius: 12px;
+  border: 1px solid #dfd2c2;
+  background: #fff;
+  color: #5f5448;
+  font-size: 12px;
+  font-weight: 800;
+  line-height: 1.35;
+  padding: 9px 10px;
+  text-align: left;
+  cursor: pointer;
+}
+
+.mode-option-btn.active {
+  border-color: #2d2521;
+  background: #2d2521;
+  color: #fff;
+}
+
+.controls-popover {
+  width: min(380px, calc(100vw - 112px));
+}
+
+.console-header {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  align-items: flex-start;
+}
+
+.console-helper {
+  margin-top: 4px;
+  color: #8a7461;
+  font-size: 12px;
+}
+
+.console-status-pill {
+  flex: 0 0 auto;
+  border-radius: 999px;
+  padding: 5px 10px;
+  background: #f0ece6;
+  color: #7f7162;
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.console-status-pill.active {
+  background: #eaf7ed;
+  color: #2b7a45;
+}
+
+.console-timer-row {
+  margin-top: 14px;
+  display: grid;
+  grid-template-columns: auto 1fr 1.2fr 1fr;
+  gap: 6px;
+  align-items: center;
+}
+
+.console-label {
+  color: #7c7062;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.console-mini-btn,
+.console-timer-value,
+.console-btn {
+  min-height: 36px;
+  border-radius: 10px;
+  font-size: 12px;
+  font-weight: 800;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.console-mini-btn,
+.console-btn {
+  border: 1px solid #dfd2c2;
+  background: #f7f3ee;
+  color: #5f5448;
+  cursor: pointer;
+}
+
+.console-timer-value {
+  border: 1px solid #dfd2c2;
+  background: #fff;
+  color: #2d2521;
+}
+
+.console-action-grid {
+  margin-top: 10px;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.console-btn.primary {
+  border-color: #2d2521;
+  background: #2d2521;
+  color: #fff;
+}
+
+.console-btn.danger {
+  border-color: #d97745;
+  background: #d97745;
+  color: #fff;
+}
+
+.console-btn.ghost {
+  background: #fff;
+}
+
+.console-finish-btn {
+  grid-column: 1 / -1;
+  min-height: 40px;
+}
+
+.console-mini-btn:disabled,
+.console-btn:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
 @media (max-width: 860px) {
+  .ai-interviewer-panel {
+    padding: 12px;
+    gap: 8px;
+    overflow-y: auto;
+    overflow-x: hidden;
+  }
+
   .topbar {
-    flex-direction: column;
-    align-items: stretch;
+    grid-template-columns: minmax(0, 1fr) 36px auto;
+    padding: 10px;
+  }
+}
+
+@media (max-width: 600px) {
+  .ai-interviewer-panel {
+    padding: 10px 10px calc(10px + env(safe-area-inset-bottom));
+    overflow: hidden;
   }
 
-  .role-switch,
-  .top-actions {
-    width: 100%;
+  .topbar {
+    grid-template-columns: 42px minmax(0, 1fr);
+    gap: 6px;
   }
 
-  .mode-btn,
-  .top-btn,
-  .config-btn,
   .history-select {
+    grid-column: 1 / -1;
+    width: 100%;
+    min-width: 0;
+    height: 34px;
+    font-size: 11.5px;
+    text-overflow: ellipsis;
+  }
+
+  .history-refresh-btn {
+    width: 42px;
+    height: 36px;
+  }
+
+  .interview-status-pill {
+    width: 100%;
+    min-width: 0;
+    height: 36px;
+    font-size: 11.5px;
+  }
+
+  .final-banner {
+    line-height: 1.5;
+  }
+
+  .workspace {
+    flex: 1 1 auto;
+    display: flex;
+    min-height: 0;
+  }
+
+  .workspace > :first-child {
     flex: 1;
+    min-height: 0;
+  }
+
+  .interview-floating-tools {
+    right: 12px;
+    bottom: calc(192px + env(safe-area-inset-bottom));
+  }
+
+  .floating-actions-stack {
+    gap: 8px;
+  }
+
+  .floating-action-btn {
+    width: 48px;
+    height: 48px;
+  }
+
+  .floating-popover {
+    right: calc(100% + 10px);
+    width: min(312px, calc(100vw - 84px));
+    max-height: min(74dvh, 560px);
+    padding: 12px;
+    border-radius: 16px;
+  }
+
+  .mode-popover,
+  .controls-popover {
+    width: min(312px, calc(100vw - 84px));
+  }
+
+  .console-header {
+    flex-direction: column;
+    gap: 8px;
+  }
+
+  .console-status-pill {
+    width: 100%;
     text-align: center;
+  }
+
+  .console-timer-row {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
+
+  .console-label {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  .console-mini-btn,
+  .console-timer-value,
+  .console-btn {
+    min-width: 0;
+    font-size: 11.5px;
   }
 }
 </style>

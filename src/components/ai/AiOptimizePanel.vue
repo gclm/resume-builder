@@ -1,3 +1,4 @@
+<!-- author: jf -->
 <script setup lang="ts">
 import { ref, computed } from 'vue'
 import MarkdownIt from 'markdown-it'
@@ -12,6 +13,10 @@ import { optimizeModule } from '@/services/aiOptimizeBackendService'
 
 const emit = defineEmits<{
   (e: 'close'): void
+}>()
+
+const props = defineProps<{
+  open: boolean
 }>()
 
 const resumeStore = useResumeStore()
@@ -1147,7 +1152,7 @@ function handleReset() {
 </script>
 
 <template>
-  <teleport to="body">
+  <teleport v-if="props.open" to="body">
     <div class="panel-overlay" @click.self="handleClose">
       <aside class="optimize-panel">
         <!-- Header -->
@@ -1771,12 +1776,65 @@ function handleReset() {
 }
 
 @media (max-width: 720px) {
+  .panel-overlay {
+    background: rgba(30, 20, 14, 0.18);
+    pointer-events: auto;
+  }
+
   .optimize-panel {
+    inset: 0;
     width: 100vw;
     max-width: 100vw;
     min-width: 0;
+    height: 100dvh;
     border-right: none;
     border-left: 1px solid #e9ded0;
+  }
+
+  .panel-header,
+  .selector-section {
+    padding-inline: 16px;
+  }
+
+  .results-area {
+    padding: 14px 16px calc(20px + env(safe-area-inset-bottom));
+  }
+
+  .action-row {
+    flex-wrap: wrap;
+  }
+
+  .btn-optimize,
+  .btn-stop,
+  .btn-reset {
+    min-width: 0;
+    flex: 1 1 150px;
+    height: 42px;
+  }
+
+  .result-card-header {
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 10px;
+  }
+
+  .result-card-actions {
+    width: 100%;
+    align-items: stretch;
+    flex-wrap: wrap;
+  }
+
+  .btn-apply,
+  .btn-undo {
+    flex: 1 1 150px;
+    justify-content: center;
+    height: 38px;
+  }
+
+  .applied-tag {
+    min-height: 34px;
+    display: inline-flex;
+    align-items: center;
   }
 }
 
@@ -1784,6 +1842,30 @@ function handleReset() {
   .optimize-panel {
     --preview-panel-width: 640px;
     min-width: 420px;
+  }
+}
+
+@media (max-width: 460px) {
+  .panel-header {
+    padding: 14px 14px;
+  }
+
+  .selector-section {
+    padding: 14px;
+  }
+
+  .results-area {
+    padding: 12px 14px calc(18px + env(safe-area-inset-bottom));
+  }
+
+  .result-content {
+    padding: 10px 12px 12px;
+    font-size: 13px;
+  }
+
+  .suggestions-card .result-card-title,
+  .result-card-header {
+    padding-inline: 12px;
   }
 }
 </style>

@@ -1,4 +1,5 @@
 ﻿<script setup lang="ts">
+// author: jf
 import { computed } from 'vue'
 import { useResumeStore } from '@/stores/resume'
 import { getResumeTemplateByKey, type ResumeTemplateDefinition } from '@/templates/resume'
@@ -109,6 +110,54 @@ const currentTemplateComponent = computed(() => currentTemplate.value.component)
     width: calc(100% - 24px);
     left: 12px;
     right: 12px;
+  }
+}
+
+@media (max-width: 720px) {
+  .resume-overlay {
+    position: fixed;
+    inset: 10px 10px calc(86px + env(safe-area-inset-bottom)) 10px;
+    width: auto;
+    border-radius: 18px;
+    padding: 10px;
+    z-index: 220;
+  }
+
+  .overlay-body {
+    padding: 8px;
+  }
+
+  .paper-shell {
+    overflow-x: hidden;
+  }
+
+  .paper {
+    overflow: hidden;
+  }
+
+  .paper :deep(.resume-header) {
+    gap: 10px;
+  }
+
+  .paper :deep(.header-main) {
+    min-width: 0;
+  }
+
+  .paper :deep(.resume-header .avatar-wrap),
+  .paper :deep(.photo-frame) {
+    width: clamp(58px, 18vw, 72px) !important;
+    height: clamp(72px, 23vw, 90px) !important;
+  }
+
+  .paper :deep(.hero-bg .avatar-wrap) {
+    width: clamp(58px, 18vw, 72px) !important;
+    height: clamp(58px, 18vw, 72px) !important;
+    border-width: 3px !important;
+  }
+
+  .close-btn {
+    width: 34px;
+    height: 34px;
   }
 }
 </style>

@@ -31,6 +31,7 @@ const props = defineProps<{
   timerRunning: boolean
   speechState: 'idle' | 'connecting' | 'connected' | 'transcribing'
   speechStatusText: string
+  showControls?: boolean
 }>()
 
 const emit = defineEmits<{
@@ -120,8 +121,13 @@ function syncTextareaHeight() {
   const textarea = answerInputRef.value
   if (!textarea) return
 
+  const isCompactViewport = window.matchMedia('(max-width: 768px)').matches
+  const isNarrowViewport = window.matchMedia('(max-width: 480px)').matches
+  const minHeight = props.sessionFinished ? (isCompactViewport ? 34 : 72) : isNarrowViewport ? 52 : isCompactViewport ? 64 : 116
+  const maxHeight = props.sessionFinished ? (isCompactViewport ? 48 : 120) : isCompactViewport ? 120 : 220
+
   textarea.style.height = '0px'
-  textarea.style.height = `${Math.min(Math.max(textarea.scrollHeight, 116), 220)}px`
+  textarea.style.height = `${Math.min(Math.max(textarea.scrollHeight, minHeight), maxHeight)}px`
 }
 
 function scrollToBottom() {
@@ -161,7 +167,7 @@ onMounted(() => {
 
 <template>
   <section class="simulation-panel">
-    <section class="card controls-card">
+    <section v-if="showControls !== false" class="card controls-card">
       <div class="controls-top">
         <div>
           <p class="card-title">面试控制台</p>
@@ -435,7 +441,8 @@ onMounted(() => {
 }
 
 .qa-card {
-  flex: 1;
+  flex: 1 1 0;
+  height: auto;
   min-height: 0;
   display: flex;
   flex-direction: column;
@@ -818,31 +825,150 @@ onMounted(() => {
 }
 
 @media (max-width: 768px) {
+  .simulation-panel {
+    gap: 8px;
+    height: 100%;
+    min-height: 0;
+  }
+
+  .card {
+    padding: 10px;
+  }
+
+  .controls-top,
   .qa-header {
     flex-direction: column;
     align-items: flex-start;
   }
 
-  .composer-shell {
-    padding: 12px;
-    border-radius: 18px;
-  }
-
-  .answer-input {
-    min-height: 104px;
-  }
-
-  .composer-footer {
-    flex-direction: column;
+  .timer-row {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    width: 100%;
     align-items: stretch;
   }
 
-  .composer-meta {
+  .timer-label,
+  .mini-btn,
+  .timer-value,
+  .action-btn {
+    min-width: 0;
+    min-height: 34px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    padding: 6px 6px;
+    font-size: 11.5px;
+    line-height: 1.15;
+    white-space: normal;
+  }
+
+  .timer-value {
     width: 100%;
+  }
+
+  .action-btn {
+    grid-column: span 2;
+    order: 3;
+    width: 100%;
+  }
+
+  .action-btn.ghost {
+    order: 4;
+  }
+
+  .action-btn.danger {
+    grid-column: 1 / -1;
+    order: 5;
+  }
+
+  .composer-shell {
+    padding: 10px;
+    border-radius: 16px;
+    gap: 8px;
+  }
+
+  .answer-input {
+    min-height: 64px;
+    max-height: 120px;
+    font-size: 13px;
+    line-height: 1.55;
+  }
+
+  .composer-footer {
+    flex-direction: row;
+    align-items: flex-end;
+    gap: 8px;
+  }
+
+  .composer-meta {
+    flex: 1;
+    width: 100%;
+    gap: 6px;
+  }
+
+  .composer-hint {
+    font-size: 11px;
+    line-height: 1.35;
+  }
+
+  .speech-pill {
+    padding: 5px 8px;
+  }
+
+  .composer-actions {
+    flex-shrink: 0;
+    justify-content: flex-end;
+    gap: 8px;
+  }
+
+  .qa-card {
+    flex: 1 1 0;
+    height: auto;
+    min-height: 0;
+  }
+
+  .chat-list {
+    min-height: 0;
+  }
+
+  .composer-shell.disabled {
+    gap: 8px;
+    padding: 10px;
+  }
+
+  .composer-shell.disabled .answer-input {
+    min-height: 34px;
+    max-height: 48px;
+  }
+}
+
+@media (max-width: 480px) {
+  .chat-list {
+    padding: 10px;
+  }
+
+  .chat-item {
+    padding: 10px;
   }
 
   .composer-actions {
     justify-content: flex-end;
+  }
+
+  .icon-btn {
+    width: 42px;
+    height: 42px;
+  }
+
+  .send-btn {
+    flex: 0 0 52px;
+    border-radius: 999px;
+  }
+
+  .answer-input {
+    min-height: 52px;
+    max-height: 96px;
   }
 }
 </style>

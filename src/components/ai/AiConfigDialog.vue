@@ -241,4 +241,36 @@ function handleCancel() {
 .btn-save:hover {
   background: #c96a3b;
 }
+
+@media (max-width: 520px) {
+  .dialog-overlay {
+    align-items: flex-end;
+    padding: 10px;
+  }
+
+  .dialog-card {
+    width: 100%;
+    max-width: none;
+    border-radius: 18px;
+  }
+
+  .dialog-header {
+    padding: 16px 16px 0;
+  }
+
+  .dialog-desc,
+  .dialog-body {
+    padding-inline: 16px;
+  }
+
+  .dialog-footer {
+    padding: 0 16px calc(16px + env(safe-area-inset-bottom));
+  }
+
+  .btn-cancel,
+  .btn-save {
+    flex: 1;
+    min-width: 0;
+  }
+}
 </style>
