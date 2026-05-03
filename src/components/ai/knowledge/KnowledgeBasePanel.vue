@@ -377,10 +377,17 @@ function statusLabel(status: string): string {
                   v-if="uploadPhase === 'ready'"
                   class="remove-btn"
                   type="button"
-                  aria-label="移除文件"
+                  aria-label="删除文件"
+                  title="删除文件"
                   @click="removeFile(index)"
                 >
-                  移除
+                  <svg class="remove-icon" viewBox="0 0 24 24" aria-hidden="true">
+                    <path d="M3 6h18" />
+                    <path d="M8 6V4h8v2" />
+                    <path d="M19 6l-1 14H6L5 6" />
+                    <path d="M10 11v5" />
+                    <path d="M14 11v5" />
+                  </svg>
                 </button>
               </li>
             </ul>
@@ -918,11 +925,31 @@ function statusLabel(status: string): string {
 }
 
 .remove-btn {
+  width: 34px;
+  height: 34px;
   padding: 0;
-  background: transparent;
+  border-radius: 12px;
+  background: rgba(186, 88, 67, 0.1);
   color: #b1633d;
-  font-size: 12px;
-  font-weight: 700;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.remove-btn:hover {
+  background: rgba(186, 88, 67, 0.16);
+  color: #9b432b;
+}
+
+.remove-icon {
+  width: 16px;
+  height: 16px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.9;
+  stroke-linecap: round;
+  stroke-linejoin: round;
 }
 
 .guidance-card {
@@ -1049,6 +1076,52 @@ function statusLabel(status: string): string {
   .dropzone {
     min-height: 172px;
     padding: 20px 16px;
+  }
+}
+
+@media (max-width: 520px) {
+  .knowledge-panel {
+    overflow-x: hidden;
+  }
+
+  .panel-shell {
+    padding: 12px;
+    gap: 12px;
+  }
+
+  .page-header h1 {
+    font-size: 24px;
+  }
+
+  .header-status {
+    justify-content: flex-start;
+  }
+
+  .phase-pill,
+  .batch-pill,
+  .status-pill,
+  .section-count-chip {
+    min-height: 34px;
+  }
+
+  .metric-list {
+    grid-template-columns: 1fr;
+  }
+
+  .metric-item {
+    text-align: left;
+  }
+
+  .result-heading {
+    width: 100%;
+  }
+
+  .status-pill {
+    align-self: flex-start;
+  }
+
+  .remove-btn {
+    min-height: 34px;
   }
 }
 </style>

@@ -439,7 +439,7 @@ onUnmounted(() => {
     </section>
 
     <AiOptimizePanel
-      v-if="showAiPanel"
+      :open="showAiPanel"
       @close="showAiPanel = false"
     />
   </main>
@@ -1159,8 +1159,34 @@ onUnmounted(() => {
 }
 
 @container (max-width: 560px) {
+  .editor-panel {
+    padding: 14px;
+    gap: 10px;
+  }
+
   .chip {
     display: none;
+  }
+
+  .floating-tools {
+    position: fixed;
+    top: auto;
+    right: 14px;
+    bottom: calc(90px + env(safe-area-inset-bottom));
+    z-index: 80;
+    height: auto;
+    align-self: auto;
+    margin-right: 0;
+  }
+
+  .floating-tools-stack {
+    transform: none;
+    gap: 10px;
+  }
+
+  .floating-tool-btn {
+    width: 48px;
+    height: 48px;
   }
 
   .module-switch-popover {
@@ -1186,8 +1212,70 @@ onUnmounted(() => {
     flex-wrap: wrap;
   }
 
+  .btn-import,
+  .btn-save {
+    flex: 1;
+    min-width: 128px;
+    height: 40px;
+  }
+
   .expand-text {
     display: none;
+  }
+
+  .module-body {
+    padding: 0 8px 8px;
+  }
+
+  .module-body :deep(.section-body) {
+    padding: 10px;
+  }
+
+  .module-body :deep(.form-grid),
+  .module-body :deep(.form-grid-2),
+  .module-body :deep(.form-grid-3),
+  .module-body :deep(.extra-field-row) {
+    grid-template-columns: minmax(0, 1fr);
+    width: 100%;
+    min-width: 0;
+    overflow: hidden;
+  }
+
+  .module-body :deep(.span-2),
+  .module-body :deep(.form-group-full) {
+    grid-column: 1 / -1;
+    width: 100%;
+    min-width: 0;
+  }
+
+  .module-body :deep(.entry-card),
+  .module-body :deep(.form-group),
+  .module-body :deep(.editor-section),
+  .module-body :deep(.rich-editor-wrap),
+  .module-body :deep(.editor-area-wrap),
+  .module-body :deep(.editor-area) {
+    width: 100%;
+    max-width: 100%;
+    min-width: 0;
+  }
+
+  .module-body :deep(.extra-field-row) {
+    gap: 8px;
+  }
+
+  .module-body :deep(.entry-header) {
+    align-items: flex-start;
+    gap: 8px;
+  }
+
+  .module-body :deep(.form-input),
+  .module-body :deep(.form-textarea),
+  .module-body :deep(.tool-select),
+  .module-body :deep(.rich-editor-wrap) {
+    width: 100%;
+    max-width: 100%;
+    min-width: 0;
+    font-size: 14px;
   }
 }
 
@@ -1207,6 +1295,20 @@ onUnmounted(() => {
 
   .info-editor {
     padding: 12px;
+  }
+
+  .module-switch-popover {
+    width: calc(100vw - 28px);
+  }
+
+  .module-switch-item {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .module-switch-actions {
+    width: 100%;
+    justify-content: space-between;
   }
 
   .stat-value {

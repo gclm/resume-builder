@@ -13,6 +13,7 @@ import { generateResumeMarkdown, downloadMarkdown } from '@/services/exportMarkd
 
 const store = useResumeStore()
 const resumeRef = ref<HTMLElement | null>(null)
+const previewScrollRef = ref<HTMLElement | null>(null)
 const exporting = ref(false)
 const exportProgress = ref(0)
 const exportProgressText = ref('')
@@ -25,6 +26,8 @@ const A4_WIDTH = 794
 const A4_RATIO = 297 / 210
 const A4_HEIGHT = Math.round(A4_WIDTH * A4_RATIO)
 const pageBreaks = ref<number[]>([])
+const previewScale = ref(1)
+const paperVisualHeight = ref(A4_HEIGHT)
 
 const fallbackTemplate: ResumeTemplateDefinition = getResumeTemplateByKey('default')
 const currentTemplate = computed<ResumeTemplateDefinition>(
@@ -32,6 +35,14 @@ const currentTemplate = computed<ResumeTemplateDefinition>(
 )
 const currentTemplateComponent = computed(() => currentTemplate.value.component)
 const a4TemplateLabel = computed(() => `A4 / ${currentTemplate.value.name}`)
+const previewWrapperStyle = computed(() => ({
+  width: `${Math.round(A4_WIDTH * previewScale.value)}px`,
+  height: `${Math.round(paperVisualHeight.value * previewScale.value)}px`,
+}))
+const previewStageStyle = computed(() => ({
+  width: `${A4_WIDTH}px`,
+  transform: `scale(${previewScale.value})`,
+}))
 
 function waitNextFrame(): Promise<void> {
   return new Promise((resolve) => requestAnimationFrame(() => resolve()))
@@ -88,12 +99,19 @@ function updatePageBreaks() {
   if (!resumeRef.value) return
   const contentHeight = resumeRef.value.scrollHeight
   const pageHeight = Math.round((resumeRef.value.clientWidth || A4_WIDTH) * A4_RATIO)
+  paperVisualHeight.value = Math.max(A4_HEIGHT, contentHeight)
   const breaks: number[] = []
   const totalPages = Math.max(1, Math.ceil((contentHeight - 1) / pageHeight))
   for (let i = 1; i < totalPages; i += 1) {
     breaks.push(Math.round(i * pageHeight))
   }
   pageBreaks.value = breaks
+}
+
+function updatePreviewScale() {
+  const viewportWidth = previewScrollRef.value?.clientWidth || A4_WIDTH
+  const nextScale = Math.min(1, Math.max(0.36, (viewportWidth - 8) / A4_WIDTH))
+  previewScale.value = Number(nextScale.toFixed(3))
 }
 
 function openTemplatePicker() {
@@ -107,13 +125,22 @@ function chooseTemplate(key: ResumeTemplateKey) {
 }
 
 let resizeObserver: ResizeObserver | null = null
+let previewResizeObserver: ResizeObserver | null = null
 
 onMounted(() => {
-  nextTick(() => updatePageBreaks())
+  nextTick(() => {
+    updatePreviewScale()
+    updatePageBreaks()
+  })
   if (resumeRef.value) {
     resizeObserver = new ResizeObserver(() => updatePageBreaks())
     resizeObserver.observe(resumeRef.value)
   }
+  if (previewScrollRef.value) {
+    previewResizeObserver = new ResizeObserver(() => updatePreviewScale())
+    previewResizeObserver.observe(previewScrollRef.value)
+  }
+  window.addEventListener('resize', updatePreviewScale)
   document.addEventListener('mousedown', handleDocumentPointerDown)
 })
 
@@ -130,12 +157,17 @@ watch(
     store.selectedTemplateKey,
   ],
   () => {
-    nextTick(() => updatePageBreaks())
+    nextTick(() => {
+      updatePreviewScale()
+      updatePageBreaks()
+    })
   }
 )
 
 onUnmounted(() => {
   resizeObserver?.disconnect()
+  previewResizeObserver?.disconnect()
+  window.removeEventListener('resize', updatePreviewScale)
   document.removeEventListener('mousedown', handleDocumentPointerDown)
 })
 
@@ -327,14 +359,16 @@ async function exportPDF(mode: ExportQualityMode) {
       @select="chooseTemplate"
     />
 
-    <div class="preview-scroll">
-      <div class="paper-wrapper" :style="{ width: `${A4_WIDTH}px` }">
-        <div ref="resumeRef" class="paper" :style="{ width: `${A4_WIDTH}px`, minHeight: `${A4_HEIGHT}px` }">
-          <component :is="currentTemplateComponent" />
-        </div>
+    <div ref="previewScrollRef" class="preview-scroll">
+      <div class="paper-wrapper" :style="previewWrapperStyle">
+        <div class="paper-scale-stage" :style="previewStageStyle">
+          <div ref="resumeRef" class="paper" :style="{ width: `${A4_WIDTH}px`, minHeight: `${A4_HEIGHT}px` }">
+            <component :is="currentTemplateComponent" />
+          </div>
 
-        <div v-for="(pos, idx) in pageBreaks" :key="idx" class="page-line" :style="{ top: `${pos}px` }">
-          <span>第{{ idx + 2 }}页</span>
+          <div v-for="(pos, idx) in pageBreaks" :key="idx" class="page-line" :style="{ top: `${pos}px` }">
+            <span>第{{ idx + 2 }}页</span>
+          </div>
         </div>
       </div>
     </div>
@@ -563,6 +597,13 @@ async function exportPDF(mode: ExportQualityMode) {
   padding-bottom: 8px;
 }
 
+.paper-scale-stage {
+  position: absolute;
+  left: 0;
+  top: 0;
+  transform-origin: top left;
+}
+
 .paper {
   box-sizing: border-box;
   background: #fff;
@@ -605,5 +646,71 @@ async function exportPDF(mode: ExportQualityMode) {
   font-weight: 600;
   background: #efe7dc;
   padding: 0 4px;
+}
+
+@media (max-width: 760px) {
+  .preview-panel {
+    width: 100%;
+    max-width: none;
+    flex: 1 1 auto;
+    height: 100%;
+    border-left: none;
+    padding: 10px 12px 14px;
+    gap: 10px;
+  }
+
+  .preview-top {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .preview-title-row {
+    flex-wrap: wrap;
+  }
+
+  .preview-title {
+    width: 100%;
+  }
+
+  .template-trigger {
+    flex: 1 1 180px;
+    justify-content: space-between;
+    height: 38px;
+  }
+
+  .template-trigger-name {
+    max-width: 140px;
+  }
+
+  .a4-badge {
+    height: 30px;
+  }
+
+  .export-actions,
+  .btn-export {
+    width: 100%;
+  }
+
+  .btn-export {
+    height: 38px;
+  }
+
+  .export-menu {
+    left: 0;
+    right: 0;
+  }
+
+  .export-menu-item {
+    min-height: 38px;
+  }
+
+  .preview-scroll {
+    overflow: auto;
+    padding: 2px 0 0;
+  }
+
+  .paper-wrapper {
+    padding-bottom: 0;
+  }
 }
 </style>

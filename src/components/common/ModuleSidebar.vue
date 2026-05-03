@@ -329,4 +329,79 @@ const primaryMenus = [
     height: 28px;
   }
 }
+
+@media (max-width: 760px) {
+  .sidebar,
+  .sidebar.collapsed {
+    position: fixed;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    z-index: 120;
+    width: auto;
+    min-width: 0;
+    height: calc(72px + env(safe-area-inset-bottom));
+    padding: 8px 10px calc(8px + env(safe-area-inset-bottom));
+    border-right: none;
+    border-top: 1px solid rgba(223, 210, 194, 0.92);
+    background: rgba(239, 231, 220, 0.96);
+    backdrop-filter: blur(14px);
+    overflow: visible;
+    box-shadow: 0 -14px 28px rgba(45, 37, 33, 0.1);
+  }
+
+  .brand,
+  .brand-text,
+  .menu-caption,
+  .collapse-btn {
+    display: none;
+  }
+
+  .primary-menu-list {
+    width: 100%;
+    height: 100%;
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 8px;
+  }
+
+  .primary-menu-item {
+    min-width: 0;
+  }
+
+  .primary-menu-btn,
+  .sidebar.collapsed .primary-menu-btn {
+    height: 100%;
+    min-height: 52px;
+    justify-content: center;
+    flex-direction: column;
+    gap: 4px;
+    padding: 6px 4px;
+    border-radius: 16px;
+    background: rgba(255, 255, 255, 0.72);
+  }
+
+  .primary-menu-btn.active {
+    background: #fff;
+    box-shadow: 0 10px 18px rgba(217, 119, 69, 0.14);
+  }
+
+  .menu-icon,
+  .sidebar.collapsed .menu-icon {
+    width: 26px;
+    height: 26px;
+  }
+
+  .menu-label,
+  .sidebar.collapsed .menu-label {
+    display: block;
+    width: 100%;
+    color: #2d2521;
+    font-size: 11px;
+    line-height: 1.1;
+    text-align: center;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+}
 </style>
