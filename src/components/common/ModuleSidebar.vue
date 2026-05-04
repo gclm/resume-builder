@@ -340,8 +340,8 @@ const primaryMenus = [
     z-index: 120;
     width: auto;
     min-width: 0;
-    height: calc(72px + env(safe-area-inset-bottom));
-    padding: 8px 10px calc(8px + env(safe-area-inset-bottom));
+    height: calc(64px + env(safe-area-inset-bottom));
+    padding: 6px 8px calc(6px + env(safe-area-inset-bottom));
     border-right: none;
     border-top: 1px solid rgba(223, 210, 194, 0.92);
     background: rgba(239, 231, 220, 0.96);
@@ -362,7 +362,7 @@ const primaryMenus = [
     height: 100%;
     display: grid;
     grid-template-columns: repeat(3, minmax(0, 1fr));
-    gap: 8px;
+    gap: 6px;
   }
 
   .primary-menu-item {
@@ -372,12 +372,12 @@ const primaryMenus = [
   .primary-menu-btn,
   .sidebar.collapsed .primary-menu-btn {
     height: 100%;
-    min-height: 52px;
+    min-height: 46px;
     justify-content: center;
     flex-direction: column;
-    gap: 4px;
-    padding: 6px 4px;
-    border-radius: 16px;
+    gap: 3px;
+    padding: 5px 4px;
+    border-radius: 13px;
     background: rgba(255, 255, 255, 0.72);
   }
 
@@ -388,8 +388,8 @@ const primaryMenus = [
 
   .menu-icon,
   .sidebar.collapsed .menu-icon {
-    width: 26px;
-    height: 26px;
+    width: 23px;
+    height: 23px;
   }
 
   .menu-label,

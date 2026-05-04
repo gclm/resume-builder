@@ -50,7 +50,11 @@ function resolvePreviewImageSrc(value: string): string {
     <div class="template-picker-dialog">
       <div class="template-picker-head">
         <span>选择模板</span>
-        <button class="template-picker-close" @click="closeDialog">关闭</button>
+        <button class="template-picker-close" type="button" aria-label="关闭模板选择" title="关闭" @click="closeDialog">
+          <svg viewBox="0 0 24 24" aria-hidden="true">
+            <path d="M6 6l12 12M18 6 6 18" />
+          </svg>
+        </button>
       </div>
       <div class="template-picker-list">
         <button
@@ -122,15 +126,27 @@ function resolvePreviewImageSrc(value: string): string {
   background: #fff;
   color: #7b6a5b;
   border-radius: 8px;
-  height: 28px;
-  padding: 0 10px;
-  font-size: 12px;
+  width: 30px;
+  height: 30px;
+  padding: 0;
   font-weight: 600;
   cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
 }
 
 .template-picker-close:hover {
   background: #faf6f0;
+}
+
+.template-picker-close svg {
+  width: 16px;
+  height: 16px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2;
+  stroke-linecap: round;
 }
 
 .template-picker-list {
@@ -222,33 +238,36 @@ function resolvePreviewImageSrc(value: string): string {
 @media (max-width: 720px) {
   .template-picker-mask {
     align-items: flex-end;
-    padding: 10px;
+    padding: 8px;
   }
 
   .template-picker-dialog {
     width: 100%;
-    max-height: min(86dvh, 760px);
-    border-radius: 18px;
+    max-height: min(84dvh, 720px);
+    border-radius: 14px;
   }
 
   .template-picker-head {
-    height: 52px;
-    padding: 0 14px;
+    min-height: 46px;
+    height: auto;
+    padding: 7px 10px;
+    font-size: 14px;
   }
 
   .template-picker-close {
-    min-width: 60px;
-    height: 34px;
+    width: 28px;
+    height: 28px;
+    border-radius: 7px;
   }
 
   .template-picker-list {
     grid-template-columns: repeat(2, minmax(0, 1fr));
-    gap: 10px;
-    padding: 12px;
+    gap: 8px;
+    padding: 9px;
   }
 
   .template-picker-item {
-    padding: 8px;
+    padding: 6px;
   }
 
   .template-name {

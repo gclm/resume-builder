@@ -1,4 +1,5 @@
 ﻿<script setup lang="ts">
+// author: jf
 import { useResumeStore } from '@/stores/resume'
 import { ref, reactive } from 'vue'
 
@@ -332,13 +333,12 @@ function removeAvatar() {
   border-radius: var(--radius-md);
   font-size: 0.88rem;
   color: var(--text-primary);
-  background: var(--gray-50);
+  background: white;
   transition: all var(--transition-fast);
   outline: none;
 }
 .form-input:focus {
   border-color: var(--primary-400);
-  background: white;
   box-shadow: 0 0 0 3px var(--primary-50);
 }
 .form-input::placeholder {

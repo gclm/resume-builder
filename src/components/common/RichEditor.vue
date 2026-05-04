@@ -315,4 +315,31 @@ function isActive(cmd: string): boolean {
   font-weight: inherit;
   color: currentColor;
 }
+
+@media (max-width: 760px) {
+  .rich-toolbar {
+    padding: 3px 6px;
+  }
+
+  .tool-btn {
+    min-width: 24px;
+    height: 22px;
+  }
+
+  .tool-select {
+    height: 30px;
+    min-width: 58px;
+    line-height: 1.2;
+  }
+
+  .tool-color {
+    width: 26px;
+    height: 26px;
+  }
+
+  .editor-area {
+    padding: 7px 9px 7px 22px;
+    line-height: 1.55;
+  }
+}
 </style>
