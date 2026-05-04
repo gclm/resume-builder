@@ -117,6 +117,11 @@ textarea {
   min-width: 0;
 }
 
+[contenteditable='true'] {
+  -webkit-user-select: text;
+  user-select: text;
+}
+
 a {
   color: var(--primary-600);
   text-decoration: none;
@@ -160,5 +165,20 @@ a {
   select,
   textarea {
     max-width: 100%;
+  }
+}
+
+@media (max-width: 760px) {
+  input,
+  textarea,
+  select,
+  [contenteditable='true'] {
+    font-size: 16px !important;
+  }
+
+  input,
+  textarea,
+  select {
+    line-height: 1.35;
   }
 }

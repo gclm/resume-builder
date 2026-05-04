@@ -1035,7 +1035,8 @@ function statusLabel(status: string): string {
 
 @media (max-width: 720px) {
   .panel-shell {
-    padding: 14px;
+    padding: 8px;
+    gap: 8px;
   }
 
   .page-header,
@@ -1044,7 +1045,7 @@ function statusLabel(status: string): string {
   .results-empty,
   .result-item,
   .compact-bar {
-    border-radius: 20px;
+    border-radius: 14px;
   }
 
   .page-header,
@@ -1056,7 +1057,7 @@ function statusLabel(status: string): string {
   }
 
   .page-header h1 {
-    font-size: 28px;
+    font-size: 22px;
   }
 
   .header-status,
@@ -1067,15 +1068,52 @@ function statusLabel(status: string): string {
   .primary-btn,
   .ghost-btn {
     width: 100%;
+    min-height: 34px;
+    border-radius: 10px;
+    font-size: 12px;
   }
 
   .metric-list {
     grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 6px;
   }
 
   .dropzone {
-    min-height: 172px;
-    padding: 20px 16px;
+    min-height: 128px;
+    padding: 14px 12px;
+    border-radius: 14px;
+    gap: 7px;
+  }
+
+  .dropzone-icon,
+  .empty-mark {
+    width: 42px;
+    height: 42px;
+    border-radius: 13px;
+    font-size: 14px;
+  }
+
+  .dropzone h3,
+  .result-head h3,
+  .results-empty h3,
+  .guidance-flow h3 {
+    font-size: 15px;
+  }
+
+  .dropzone p,
+  .header-text,
+  .guidance-head p,
+  .results-empty p,
+  .file-meta,
+  .file-error,
+  .guidance-flow li {
+    font-size: 12px;
+    line-height: 1.45;
+  }
+
+  .main-card,
+  .guidance-card {
+    gap: 10px;
   }
 }
 
@@ -1085,31 +1123,84 @@ function statusLabel(status: string): string {
   }
 
   .panel-shell {
-    padding: 12px;
-    gap: 12px;
+    padding: 6px 7px 8px;
+    gap: 7px;
+  }
+
+  .page-header,
+  .main-card,
+  .guidance-card {
+    padding: 10px;
   }
 
   .page-header h1 {
-    font-size: 24px;
+    font-size: 20px;
+  }
+
+  .eyebrow,
+  .section-label {
+    margin-bottom: 4px;
+    font-size: 10px;
+  }
+
+  .header-text {
+    margin-top: 6px;
   }
 
   .header-status {
     justify-content: flex-start;
+    gap: 6px;
   }
 
   .phase-pill,
   .batch-pill,
   .status-pill,
   .section-count-chip {
-    min-height: 34px;
+    min-height: 24px;
+    padding: 0 8px;
+    font-size: 10.5px;
   }
 
   .metric-list {
-    grid-template-columns: 1fr;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
   }
 
   .metric-item {
-    text-align: left;
+    padding: 7px 6px;
+    border-radius: 11px;
+    text-align: center;
+  }
+
+  .metric-label {
+    font-size: 9.5px;
+  }
+
+  .metric-item strong {
+    margin-top: 4px;
+    font-size: 17px;
+  }
+
+  .compact-bar {
+    gap: 8px;
+    padding: 9px;
+  }
+
+  .compact-summary {
+    font-size: 12px;
+  }
+
+  .result-list,
+  .result-block {
+    gap: 7px;
+  }
+
+  .result-item {
+    gap: 8px;
+    padding: 9px;
+  }
+
+  .file-name {
+    font-size: 13px;
   }
 
   .result-heading {
@@ -1121,7 +1212,33 @@ function statusLabel(status: string): string {
   }
 
   .remove-btn {
-    min-height: 34px;
+    width: 30px;
+    height: 30px;
+    min-height: 30px;
+    border-radius: 9px;
+  }
+
+  .guidance-card {
+    gap: 8px;
+  }
+
+  .guidance-facts {
+    gap: 6px;
+  }
+
+  .fact-row {
+    padding: 8px 9px;
+    border-radius: 11px;
+  }
+
+  .fact-row dd {
+    margin-top: 4px;
+    font-size: 12px;
+  }
+
+  .guidance-flow {
+    padding: 9px 10px;
+    border-radius: 12px;
   }
 }
 </style>

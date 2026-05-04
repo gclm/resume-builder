@@ -1418,51 +1418,69 @@ onUnmounted(() => {
 
 @media (max-width: 860px) {
   .ai-interviewer-panel {
-    padding: 12px;
-    gap: 8px;
+    padding: 10px;
+    gap: 7px;
     overflow-y: auto;
     overflow-x: hidden;
   }
 
   .topbar {
     grid-template-columns: minmax(0, 1fr) 36px auto;
-    padding: 10px;
+    padding: 8px;
   }
 }
 
 @media (max-width: 600px) {
   .ai-interviewer-panel {
-    padding: 10px 10px calc(10px + env(safe-area-inset-bottom));
+    padding: 6px 6px calc(6px + env(safe-area-inset-bottom));
     overflow: hidden;
   }
 
   .topbar {
-    grid-template-columns: 42px minmax(0, 1fr);
-    gap: 6px;
+    grid-template-columns: 32px minmax(0, 1fr);
+    gap: 5px;
+    padding: 6px;
+    border-radius: 9px;
+    overflow: hidden;
   }
 
   .history-select {
     grid-column: 1 / -1;
     width: 100%;
     min-width: 0;
-    height: 34px;
-    font-size: 11.5px;
+    height: 32px;
     text-overflow: ellipsis;
+    padding: 0 7px;
   }
 
   .history-refresh-btn {
-    width: 42px;
-    height: 36px;
+    width: 32px;
+    height: 30px;
+    border-radius: 8px;
+  }
+
+  .history-refresh-btn svg {
+    width: 15px;
+    height: 15px;
   }
 
   .interview-status-pill {
     width: 100%;
     min-width: 0;
-    height: 36px;
-    font-size: 11.5px;
+    height: 30px;
+    font-size: 10.5px;
+    gap: 5px;
+    padding: 0 7px;
+  }
+
+  .interview-status-dot {
+    width: 6px;
+    height: 6px;
   }
 
   .final-banner {
+    padding: 6px 8px;
+    font-size: 11px;
     line-height: 1.5;
   }
 
@@ -1478,30 +1496,35 @@ onUnmounted(() => {
   }
 
   .interview-floating-tools {
-    right: 12px;
-    bottom: calc(192px + env(safe-area-inset-bottom));
+    right: 8px;
+    bottom: calc(150px + env(safe-area-inset-bottom));
   }
 
   .floating-actions-stack {
-    gap: 8px;
+    gap: 6px;
   }
 
   .floating-action-btn {
-    width: 48px;
-    height: 48px;
+    width: 40px;
+    height: 40px;
+  }
+
+  .floating-action-btn svg {
+    width: 18px;
+    height: 18px;
   }
 
   .floating-popover {
-    right: calc(100% + 10px);
-    width: min(312px, calc(100vw - 84px));
-    max-height: min(74dvh, 560px);
-    padding: 12px;
-    border-radius: 16px;
+    right: calc(100% + 7px);
+    width: min(292px, calc(100vw - 60px));
+    max-height: min(72dvh, 540px);
+    padding: 8px;
+    border-radius: 12px;
   }
 
   .mode-popover,
   .controls-popover {
-    width: min(312px, calc(100vw - 84px));
+    width: min(292px, calc(100vw - 60px));
   }
 
   .console-header {
@@ -1516,6 +1539,8 @@ onUnmounted(() => {
 
   .console-timer-row {
     grid-template-columns: repeat(4, minmax(0, 1fr));
+    margin-top: 8px;
+    gap: 5px;
   }
 
   .console-label {
@@ -1528,7 +1553,18 @@ onUnmounted(() => {
   .console-timer-value,
   .console-btn {
     min-width: 0;
-    font-size: 11.5px;
+    font-size: 10.5px;
+    min-height: 30px;
+    border-radius: 8px;
+  }
+
+  .console-action-grid {
+    gap: 6px;
+    margin-top: 8px;
+  }
+
+  .console-finish-btn {
+    min-height: 34px;
   }
 }
 </style>

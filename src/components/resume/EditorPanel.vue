@@ -1148,6 +1148,13 @@ onUnmounted(() => {
   border-color: #e9ded0;
 }
 
+@media (max-width: 760px) {
+  .editor-panel {
+    padding: 6px 7px 8px;
+    gap: 6px;
+  }
+}
+
 .fade-enter-active,
 .fade-leave-active {
   transition: opacity 0.2s;
@@ -1160,8 +1167,22 @@ onUnmounted(() => {
 
 @container (max-width: 560px) {
   .editor-panel {
-    padding: 14px;
-    gap: 10px;
+    padding: 6px 7px 8px;
+    gap: 6px;
+  }
+
+  .editor-toolbar {
+    gap: 8px;
+  }
+
+  .search-input {
+    height: 34px;
+    padding: 0 8px;
+  }
+
+  .search-input::placeholder {
+    color: #a89482;
+    font-size: 12px;
   }
 
   .chip {
@@ -1171,8 +1192,8 @@ onUnmounted(() => {
   .floating-tools {
     position: fixed;
     top: auto;
-    right: 14px;
-    bottom: calc(90px + env(safe-area-inset-bottom));
+    right: 8px;
+    bottom: calc(78px + env(safe-area-inset-bottom));
     z-index: 80;
     height: auto;
     align-self: auto;
@@ -1181,30 +1202,96 @@ onUnmounted(() => {
 
   .floating-tools-stack {
     transform: none;
-    gap: 10px;
+    gap: 8px;
   }
 
   .floating-tool-btn {
-    width: 48px;
-    height: 48px;
+    width: 44px;
+    height: 44px;
   }
 
   .module-switch-popover {
     right: 0;
     top: auto;
-    bottom: calc(100% + 10px);
-    width: min(280px, calc(100vw - 24px));
+    bottom: calc(100% + 8px);
+    width: min(256px, calc(100vw - 16px));
     max-width: none;
+    padding: 8px;
+    border-radius: 10px;
+  }
+
+  .module-switch-popover-title {
+    font-size: 11px;
+  }
+
+  .module-switch-popover-header {
+    margin-bottom: 6px;
+  }
+
+  .btn-reset-order-icon {
+    width: 24px;
+    height: 24px;
+    border-radius: 7px;
+  }
+
+  .module-switch-list {
+    gap: 5px;
+    max-height: min(58dvh, 360px);
+  }
+
+  .module-switch-item {
+    gap: 6px;
+    padding: 7px 8px;
+    border-radius: 8px;
+  }
+
+  .module-switch-info {
+    gap: 6px;
+  }
+
+  .module-switch-label {
+    font-size: 12px;
+  }
+
+  .order-btn {
+    width: 20px;
+    height: 20px;
+    border-radius: 5px;
+    font-size: 11px;
+  }
+
+  .toggle-switch {
+    width: 34px;
+    height: 20px;
+  }
+
+  .toggle-slider::before {
+    width: 14px;
+    height: 14px;
+  }
+
+  .toggle-switch input:checked + .toggle-slider::before {
+    transform: translateX(14px);
   }
 
   .stats-row {
-    grid-template-columns: 1fr;
-    gap: 8px;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 6px;
+  }
+
+  .stat-card {
+    padding: 8px 10px;
+    border-radius: 8px;
+  }
+
+  .stat-label {
+    margin-bottom: 2px;
   }
 
   .info-editor-header {
     flex-direction: column;
     align-items: flex-start;
+    gap: 8px;
   }
 
   .editor-header-actions {
@@ -1216,19 +1303,65 @@ onUnmounted(() => {
   .btn-save {
     flex: 1;
     min-width: 128px;
-    height: 40px;
+    height: 32px;
+    padding: 0 8px;
+    font-size: 11px;
   }
 
   .expand-text {
     display: none;
   }
 
+  .module-sections {
+    gap: 6px;
+    margin-top: 6px;
+  }
+
+  .module-block {
+    border-radius: 9px;
+  }
+
+  .module-head {
+    height: 34px;
+    gap: 6px;
+    padding: 0 8px;
+  }
+
+  .module-head-left {
+    gap: 8px;
+  }
+
+  .module-head-title {
+    font-size: 13px;
+  }
+
   .module-body {
-    padding: 0 8px 8px;
+    padding: 0 6px 6px;
   }
 
   .module-body :deep(.section-body) {
-    padding: 10px;
+    padding: 6px;
+  }
+
+  .module-body :deep(.entry-card) {
+    padding: 8px;
+    margin-bottom: 8px;
+  }
+
+  .module-body :deep(.form-grid),
+  .module-body :deep(.form-grid-2),
+  .module-body :deep(.form-grid-3) {
+    gap: 8px;
+  }
+
+  .module-body :deep(.form-group),
+  .module-body :deep(.form-group-full) {
+    gap: 3px;
+  }
+
+  .module-body :deep(.form-label) {
+    font-size: 11px;
+    line-height: 1.25;
   }
 
   .module-body :deep(.form-grid),
@@ -1265,7 +1398,7 @@ onUnmounted(() => {
 
   .module-body :deep(.entry-header) {
     align-items: flex-start;
-    gap: 8px;
+    gap: 6px;
   }
 
   .module-body :deep(.form-input),
@@ -1275,7 +1408,52 @@ onUnmounted(() => {
     width: 100%;
     max-width: 100%;
     min-width: 0;
-    font-size: 14px;
+    min-inline-size: 0;
+  }
+
+  .module-body :deep(.form-input),
+  .module-body :deep(.form-textarea) {
+    padding: 5px 8px;
+    line-height: 1.25;
+  }
+
+  .module-body :deep(input[type='month'].form-input) {
+    display: block;
+    inline-size: 100%;
+    min-inline-size: 0;
+    max-inline-size: 100%;
+    padding-right: 4px;
+    overflow: hidden;
+    appearance: none;
+    -webkit-appearance: none;
+  }
+
+  .module-body :deep(input[type='month'].form-input::-webkit-date-and-time-value) {
+    min-inline-size: 0;
+    text-align: left;
+  }
+
+  .module-body :deep(input[type='month'].form-input::-webkit-calendar-picker-indicator) {
+    flex: 0 0 16px;
+    width: 16px;
+    height: 16px;
+    margin-left: 2px;
+    padding: 0;
+  }
+
+  .module-body :deep(.form-input) {
+    min-height: 34px;
+  }
+
+  .module-body :deep(.form-textarea) {
+    min-height: 68px;
+    line-height: 1.45;
+  }
+
+  .module-body :deep(.form-input::placeholder),
+  .module-body :deep(.form-textarea::placeholder) {
+    color: #a89482;
+    font-size: 12px;
   }
 }
 
@@ -1289,16 +1467,16 @@ onUnmounted(() => {
   }
 
   .editor-panel {
-    padding: 14px;
-    gap: 10px;
+    padding: 6px 7px 8px;
+    gap: 6px;
   }
 
   .info-editor {
-    padding: 12px;
+    padding: 8px;
   }
 
   .module-switch-popover {
-    width: calc(100vw - 28px);
+    width: calc(100vw - 16px);
   }
 
   .module-switch-item {
@@ -1312,7 +1490,13 @@ onUnmounted(() => {
   }
 
   .stat-value {
-    font-size: 26px;
+    font-size: 22px;
+  }
+}
+
+@container (max-width: 300px) {
+  .stats-row {
+    grid-template-columns: 1fr;
   }
 }
 </style>

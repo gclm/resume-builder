@@ -655,8 +655,8 @@ async function exportPDF(mode: ExportQualityMode) {
     flex: 1 1 auto;
     height: 100%;
     border-left: none;
-    padding: 10px 12px 14px;
-    gap: 10px;
+    padding: 6px 7px 8px;
+    gap: 7px;
   }
 
   .preview-top {
@@ -675,7 +675,7 @@ async function exportPDF(mode: ExportQualityMode) {
   .template-trigger {
     flex: 1 1 180px;
     justify-content: space-between;
-    height: 38px;
+    height: 34px;
   }
 
   .template-trigger-name {
@@ -683,7 +683,7 @@ async function exportPDF(mode: ExportQualityMode) {
   }
 
   .a4-badge {
-    height: 30px;
+    height: 26px;
   }
 
   .export-actions,
@@ -692,7 +692,7 @@ async function exportPDF(mode: ExportQualityMode) {
   }
 
   .btn-export {
-    height: 38px;
+    height: 34px;
   }
 
   .export-menu {
@@ -701,7 +701,7 @@ async function exportPDF(mode: ExportQualityMode) {
   }
 
   .export-menu-item {
-    min-height: 38px;
+    min-height: 34px;
   }
 
   .preview-scroll {

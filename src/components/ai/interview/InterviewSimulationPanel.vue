@@ -59,7 +59,6 @@ const pauseButtonLabel = computed(() => (props.timerRunning ? '暂停' : '继续
 const isComposerBusy = computed(() =>
   props.isLoading || ['submitting', 'accepted', 'processing', 'responding'].includes(props.requestState)
 )
-const isSpeechActive = computed(() => ['connecting', 'connected', 'transcribing'].includes(props.speechState))
 const composerPlaceholder = computed(() => {
   if (!props.sessionStarted) {
     return '点击“开始”后，系统会生成第一轮问题或候选人开场回答'
@@ -123,8 +122,8 @@ function syncTextareaHeight() {
 
   const isCompactViewport = window.matchMedia('(max-width: 768px)').matches
   const isNarrowViewport = window.matchMedia('(max-width: 480px)').matches
-  const minHeight = props.sessionFinished ? (isCompactViewport ? 34 : 72) : isNarrowViewport ? 52 : isCompactViewport ? 64 : 116
-  const maxHeight = props.sessionFinished ? (isCompactViewport ? 48 : 120) : isCompactViewport ? 120 : 220
+  const minHeight = props.sessionFinished ? (isCompactViewport ? 28 : 72) : isNarrowViewport ? 40 : isCompactViewport ? 48 : 116
+  const maxHeight = props.sessionFinished ? (isCompactViewport ? 38 : 120) : isCompactViewport ? 86 : 220
 
   textarea.style.height = '0px'
   textarea.style.height = `${Math.min(Math.max(textarea.scrollHeight, minHeight), maxHeight)}px`
@@ -275,16 +274,6 @@ onMounted(() => {
           <div class="composer-footer">
             <div class="composer-meta">
               <p class="composer-hint">{{ composerHintText }}</p>
-              <span
-                class="speech-pill"
-                :class="{
-                  active: isSpeechActive,
-                  listening: speechState === 'connected',
-                  transcribing: speechState === 'transcribing',
-                }"
-              >
-                {{ speechStatusText }}
-              </span>
             </div>
             <div class="composer-actions">
               <button
@@ -826,13 +815,13 @@ onMounted(() => {
 
 @media (max-width: 768px) {
   .simulation-panel {
-    gap: 8px;
+    gap: 5px;
     height: 100%;
     min-height: 0;
   }
 
   .card {
-    padding: 10px;
+    padding: 6px;
   }
 
   .controls-top,
@@ -883,46 +872,52 @@ onMounted(() => {
   }
 
   .composer-shell {
-    padding: 10px;
-    border-radius: 16px;
-    gap: 8px;
+    padding: 6px;
+    border-radius: 12px;
+    gap: 5px;
   }
 
   .answer-input {
-    min-height: 64px;
-    max-height: 120px;
-    font-size: 13px;
-    line-height: 1.55;
+    min-height: 48px;
+    max-height: 86px;
+    line-height: 1.35;
+  }
+
+  .answer-input::placeholder {
+    color: #a58d78;
+    font-size: 12px;
   }
 
   .composer-footer {
     flex-direction: row;
     align-items: flex-end;
-    gap: 8px;
+    gap: 5px;
   }
 
   .composer-meta {
     flex: 1;
     width: 100%;
-    gap: 6px;
+    gap: 4px;
   }
 
   .composer-hint {
-    font-size: 11px;
+    font-size: 10px;
     line-height: 1.35;
   }
 
   .speech-pill {
-    padding: 5px 8px;
+    padding: 3px 6px;
+    font-size: 10px;
   }
 
   .composer-actions {
     flex-shrink: 0;
     justify-content: flex-end;
-    gap: 8px;
+    gap: 5px;
   }
 
   .qa-card {
+    gap: 6px;
     flex: 1 1 0;
     height: auto;
     min-height: 0;
@@ -930,26 +925,35 @@ onMounted(() => {
 
   .chat-list {
     min-height: 0;
+    border-radius: 10px;
+    padding: 6px;
+    gap: 6px;
+  }
+
+  .chat-item {
+    border-radius: 10px;
+    padding: 7px 8px;
+    gap: 5px;
   }
 
   .composer-shell.disabled {
-    gap: 8px;
-    padding: 10px;
+    gap: 5px;
+    padding: 6px;
   }
 
   .composer-shell.disabled .answer-input {
-    min-height: 34px;
-    max-height: 48px;
+    min-height: 28px;
+    max-height: 38px;
   }
 }
 
 @media (max-width: 480px) {
   .chat-list {
-    padding: 10px;
+    padding: 8px;
   }
 
   .chat-item {
-    padding: 10px;
+    padding: 8px;
   }
 
   .composer-actions {
@@ -957,18 +961,23 @@ onMounted(() => {
   }
 
   .icon-btn {
-    width: 42px;
-    height: 42px;
+    width: 34px;
+    height: 34px;
+  }
+
+  .icon-btn svg {
+    width: 16px;
+    height: 16px;
   }
 
   .send-btn {
-    flex: 0 0 52px;
+    flex: 0 0 40px;
     border-radius: 999px;
   }
 
   .answer-input {
-    min-height: 52px;
-    max-height: 96px;
+    min-height: 40px;
+    max-height: 76px;
   }
 }
 </style>

@@ -98,7 +98,7 @@ function handleSelectMenu(key: PrimaryMenuKey) {
   .app-layout {
     height: 100dvh;
     min-height: 100dvh;
-    padding-bottom: calc(76px + env(safe-area-inset-bottom));
+    padding-bottom: calc(68px + env(safe-area-inset-bottom));
     background: #f7f2ec;
   }
 
@@ -113,8 +113,8 @@ function handleSelectMenu(key: PrimaryMenuKey) {
   .mobile-resume-tabs {
     display: grid;
     grid-template-columns: repeat(2, minmax(0, 1fr));
-    gap: 6px;
-    padding: 10px 12px 8px;
+    gap: 5px;
+    padding: 7px 8px 6px;
     background: rgba(247, 242, 236, 0.96);
     border-bottom: 1px solid #e4d8cb;
     flex-shrink: 0;
@@ -122,12 +122,12 @@ function handleSelectMenu(key: PrimaryMenuKey) {
   }
 
   .mobile-resume-tab {
-    min-height: 40px;
+    min-height: 34px;
     border: 1px solid #dfd2c2;
     border-radius: 12px;
     background: #fff;
     color: #7b6a5b;
-    font-size: 13px;
+    font-size: 12px;
     font-weight: 800;
   }
 
