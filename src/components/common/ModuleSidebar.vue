@@ -1,9 +1,11 @@
 <!-- author: jf -->
 <script setup lang="ts">
+import { resolvePrimaryMenuPath, type PrimaryMenuKey } from '@/router/menuRoutes'
+
 const props = withDefaults(
   defineProps<{
     collapsed?: boolean
-    activeMenu?: 'resume-editor' | 'ai-interviewer' | 'knowledge-base'
+    activeMenu?: PrimaryMenuKey
   }>(),
   {
     collapsed: false,
@@ -13,29 +15,44 @@ const props = withDefaults(
 
 const emit = defineEmits<{
   (e: 'toggle-collapse'): void
-  (e: 'select-menu', key: 'resume-editor' | 'ai-interviewer' | 'knowledge-base'): void
+  (e: 'select-menu', key: PrimaryMenuKey): void
 }>()
 
-const primaryMenus = [
+const primaryMenus: Array<{ key: PrimaryMenuKey; label: string; path: string; iconPath: string }> = [
   {
-    key: 'resume-editor' as const,
+    key: 'resume-editor',
     label: '简历编辑',
+    path: resolvePrimaryMenuPath('resume-editor'),
     iconPath:
       'M15 3H8a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h8a2 2 0 0 0 2-2V8Zm0 0v5h5M9 13h6M9 17h4',
   },
   {
-    key: 'ai-interviewer' as const,
+    key: 'ai-interviewer',
     label: 'AI面试',
+    path: resolvePrimaryMenuPath('ai-interviewer'),
     iconPath:
       'M9 3h6M12 3v3m-6 4h12a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-3l-3 2-3-2H6a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2Zm3 3h.01M15 15h.01',
   },
   {
-    key: 'knowledge-base' as const,
+    key: 'knowledge-base',
     label: '知识库',
+    path: resolvePrimaryMenuPath('knowledge-base'),
     iconPath:
       'M6 5.5A2.5 2.5 0 0 1 8.5 3H18v15.5A2.5 2.5 0 0 0 15.5 16H6Zm0 0v11A2.5 2.5 0 0 0 8.5 19H18M10 7h4M10 10h4M10 13h3',
   },
+  {
+    key: 'account-settings',
+    label: '账号设置',
+    path: resolvePrimaryMenuPath('account-settings'),
+    iconPath: 'M12 12a4 4 0 1 0 0-8 4 4 0 0 0 0 8ZM4 21a8 8 0 0 1 16 0',
+  },
 ]
+
+function handleMenuClick(event: MouseEvent, key: PrimaryMenuKey) {
+  if (event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return
+  event.preventDefault()
+  emit('select-menu', key)
+}
 </script>
 
 <template>
@@ -47,29 +64,31 @@ const primaryMenus = [
         </span>
         <span class="brand-text">Resume Builder</span>
       </div>
-      <button
-        class="collapse-btn"
-        type="button"
-        :aria-label="props.collapsed ? '展开侧边菜单' : '收起侧边菜单'"
-        :title="props.collapsed ? '展开' : '收缩'"
-        :data-tip="props.collapsed ? '展开' : '收缩'"
-        @click="emit('toggle-collapse')"
-      >
-        {{ props.collapsed ? '>' : '<' }}
-      </button>
+      <div class="brand-actions">
+        <button
+          class="collapse-btn"
+          type="button"
+          :aria-label="props.collapsed ? '展开侧边菜单' : '收起侧边菜单'"
+          :title="props.collapsed ? '展开' : '收缩'"
+          :data-tip="props.collapsed ? '展开' : '收缩'"
+          @click="emit('toggle-collapse')"
+        >
+          {{ props.collapsed ? '>' : '<' }}
+        </button>
+      </div>
     </div>
 
     <p class="menu-caption">功能菜单</p>
 
     <ul class="primary-menu-list">
       <li v-for="menu in primaryMenus" :key="menu.key" class="primary-menu-item">
-        <button
+        <a
           class="primary-menu-btn"
-          type="button"
+          :href="menu.path"
           :class="{ active: props.activeMenu === menu.key }"
           :aria-current="props.activeMenu === menu.key ? 'page' : undefined"
           :title="menu.label"
-          @click="emit('select-menu', menu.key)"
+          @click="handleMenuClick($event, menu.key)"
         >
           <span class="menu-icon" aria-hidden="true">
             <svg viewBox="0 0 24 24" fill="none">
@@ -77,7 +96,7 @@ const primaryMenus = [
             </svg>
           </span>
           <span class="menu-label">{{ menu.label }}</span>
-        </button>
+        </a>
       </li>
     </ul>
   </aside>
@@ -109,6 +128,13 @@ const primaryMenus = [
   align-items: center;
   gap: 12px;
   min-width: 0;
+}
+
+.brand-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  flex-shrink: 0;
 }
 
 .brand-logo-wrap {
@@ -224,6 +250,7 @@ const primaryMenus = [
   align-items: center;
   gap: 8px;
   text-align: left;
+  text-decoration: none;
   cursor: pointer;
   transition: border-color 0.18s ease, background-color 0.18s ease;
 }
@@ -361,7 +388,7 @@ const primaryMenus = [
     width: 100%;
     height: 100%;
     display: grid;
-    grid-template-columns: repeat(3, minmax(0, 1fr));
+    grid-template-columns: repeat(4, minmax(0, 1fr));
     gap: 6px;
   }
 

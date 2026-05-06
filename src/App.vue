@@ -1,24 +1,111 @@
 <!-- author: jf -->
 <script setup lang="ts">
-import { ref } from 'vue'
+import { onMounted, onUnmounted, ref } from 'vue'
 import KnowledgeBasePanel from '@/components/ai/knowledge/KnowledgeBasePanel.vue'
 import AiInterviewerPanel from '@/components/ai/interview/AiInterviewerPanel.vue'
 import ModuleSidebar from '@/components/common/ModuleSidebar.vue'
 import EditorPanel from '@/components/resume/EditorPanel.vue'
 import PreviewPanel from '@/components/resume/PreviewPanel.vue'
+import AccountSettingsPanel from '@/components/settings/AccountSettingsPanel.vue'
+import {
+  DEFAULT_PRIMARY_MENU_KEY,
+  isPrimaryMenuRoutePath,
+  normalizePrimaryRoutePath,
+  resolvePrimaryMenuFromPath,
+  resolvePrimaryMenuPath,
+  type PrimaryMenuKey,
+} from '@/router/menuRoutes'
 
 const sidebarCollapsed = ref(false)
-type PrimaryMenuKey = 'resume-editor' | 'ai-interviewer' | 'knowledge-base'
 type ResumeMobilePane = 'editor' | 'preview'
-const activeMenu = ref<PrimaryMenuKey>('resume-editor')
+const activeMenu = ref<PrimaryMenuKey>(
+  typeof window === 'undefined' ? DEFAULT_PRIMARY_MENU_KEY : resolvePrimaryMenuFromPath(window.location.pathname)
+)
 const activeResumePane = ref<ResumeMobilePane>('editor')
+type ThemeMode = 'light' | 'dark'
+const THEME_STORAGE_KEY = 'resume-builder-theme'
+const themeMode = ref<ThemeMode>(resolveInitialThemeMode())
 
-function handleSelectMenu(key: PrimaryMenuKey) {
+function resolveInitialThemeMode(): ThemeMode {
+  if (typeof window === 'undefined') return 'light'
+
+  let storedMode: string | null = null
+  try {
+    storedMode = window.localStorage.getItem(THEME_STORAGE_KEY)
+  } catch {
+    storedMode = null
+  }
+
+  return storedMode === 'dark' ? 'dark' : 'light'
+}
+
+function applyThemeMode(mode: ThemeMode) {
+  if (typeof document === 'undefined') return
+
+  const root = document.documentElement
+  root.dataset.theme = mode
+  root.classList.toggle('dark', mode === 'dark')
+  root.style.colorScheme = mode
+}
+
+function persistThemeMode(mode: ThemeMode) {
+  if (typeof window === 'undefined') return
+
+  try {
+    window.localStorage.setItem(THEME_STORAGE_KEY, mode)
+  } catch {
+    // 存储受限时仅保持当前页面主题，不阻断用户切换。
+  }
+}
+
+function setThemeMode(mode: ThemeMode) {
+  themeMode.value = mode
+  applyThemeMode(mode)
+  persistThemeMode(mode)
+}
+
+applyThemeMode(themeMode.value)
+
+function setActiveMenu(key: PrimaryMenuKey) {
   activeMenu.value = key
   if (key === 'resume-editor') {
     activeResumePane.value = 'editor'
   }
 }
+
+function syncMenuFromLocation() {
+  if (typeof window === 'undefined') return
+
+  const key = resolvePrimaryMenuFromPath(window.location.pathname)
+  const targetPath = resolvePrimaryMenuPath(key)
+  const currentPath = normalizePrimaryRoutePath(window.location.pathname)
+
+  setActiveMenu(key)
+
+  if (!isPrimaryMenuRoutePath(window.location.pathname) || currentPath !== targetPath) {
+    window.history.replaceState({ primaryMenu: key }, '', targetPath)
+  }
+}
+
+function handleSelectMenu(key: PrimaryMenuKey) {
+  setActiveMenu(key)
+
+  if (typeof window === 'undefined') return
+
+  const targetPath = resolvePrimaryMenuPath(key)
+  if (normalizePrimaryRoutePath(window.location.pathname) !== targetPath) {
+    window.history.pushState({ primaryMenu: key }, '', targetPath)
+  }
+}
+
+onMounted(() => {
+  syncMenuFromLocation()
+  window.addEventListener('popstate', syncMenuFromLocation)
+})
+
+onUnmounted(() => {
+  window.removeEventListener('popstate', syncMenuFromLocation)
+})
 </script>
 
 <template>
@@ -63,7 +150,12 @@ function handleSelectMenu(key: PrimaryMenuKey) {
         />
       </template>
       <AiInterviewerPanel v-else-if="activeMenu === 'ai-interviewer'" />
-      <KnowledgeBasePanel v-else />
+      <KnowledgeBasePanel v-else-if="activeMenu === 'knowledge-base'" />
+      <AccountSettingsPanel
+        v-else
+        :theme-mode="themeMode"
+        @set-theme="setThemeMode"
+      />
     </div>
   </div>
 </template>
@@ -99,7 +191,7 @@ function handleSelectMenu(key: PrimaryMenuKey) {
     height: 100dvh;
     min-height: 100dvh;
     padding-bottom: calc(68px + env(safe-area-inset-bottom));
-    background: #f7f2ec;
+    background: var(--bg-app);
   }
 
   .main-content {
