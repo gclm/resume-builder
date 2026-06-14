@@ -1,17 +1,1 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="800" height="1120" viewBox="0 0 800 1120" role="img" aria-label="Blue split pro template preview">
-  <rect width="800" height="1120" fill="#ffffff" />
-  <rect x="24" y="24" width="752" height="1072" rx="20" fill="#f8fbff" stroke="#c8d6ef" />
-  <rect x="24" y="24" width="236" height="1072" rx="20" fill="#3e6fd7" />
-  <rect x="74" y="88" width="136" height="170" rx="10" fill="#bbcff7" />
-  <rect x="62" y="286" width="160" height="28" rx="8" fill="#ebf2ff" />
-  <rect x="62" y="336" width="132" height="18" rx="6" fill="#dbe8ff" />
-  <rect x="62" y="366" width="132" height="18" rx="6" fill="#dbe8ff" />
-  <rect x="62" y="422" width="132" height="18" rx="6" fill="#dbe8ff" />
-  <rect x="290" y="90" width="220" height="26" rx="10" fill="#3e6fd7" />
-  <rect x="290" y="128" width="450" height="12" rx="6" fill="#bed0ee" />
-  <rect x="290" y="160" width="450" height="12" rx="6" fill="#bed0ee" />
-  <rect x="290" y="222" width="220" height="26" rx="10" fill="#3e6fd7" />
-  <rect x="290" y="260" width="450" height="12" rx="6" fill="#bed0ee" />
-  <rect x="290" y="292" width="450" height="12" rx="6" fill="#bed0ee" />
-  <text x="510" y="1038" text-anchor="middle" font-family="Segoe UI, Arial, sans-serif" font-size="32" fill="#4b689d">BLUE SPLIT PRO</text>
-</svg>
+<svg xmlns="http://www.w3.org/2000/svg" width="800" height="1120" aria-label="Blue split pro template preview" role="img" viewBox="0 0 800 1120"><rect width="800" height="1120" fill="#fff"/><rect width="752" height="1072" x="24" y="24" fill="#f8fbff" stroke="#c8d6ef" rx="20"/><rect width="236" height="1072" x="24" y="24" fill="#3e6fd7" rx="20"/><rect width="136" height="170" x="74" y="88" fill="#bbcff7" rx="10"/><rect width="160" height="28" x="62" y="286" fill="#ebf2ff" rx="8"/><rect width="132" height="18" x="62" y="336" fill="#dbe8ff" rx="6"/><rect width="132" height="18" x="62" y="366" fill="#dbe8ff" rx="6"/><rect width="132" height="18" x="62" y="422" fill="#dbe8ff" rx="6"/><rect width="220" height="26" x="290" y="90" fill="#3e6fd7" rx="10"/><rect width="450" height="12" x="290" y="128" fill="#bed0ee" rx="6"/><rect width="450" height="12" x="290" y="160" fill="#bed0ee" rx="6"/><rect width="220" height="26" x="290" y="222" fill="#3e6fd7" rx="10"/><rect width="450" height="12" x="290" y="260" fill="#bed0ee" rx="6"/><rect width="450" height="12" x="290" y="292" fill="#bed0ee" rx="6"/><text x="510" y="1038" fill="#4b689d" font-family="Segoe UI, Arial, sans-serif" font-size="32" text-anchor="middle">BLUE SPLIT PRO</text></svg>
