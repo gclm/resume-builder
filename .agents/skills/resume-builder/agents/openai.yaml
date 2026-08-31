@@ -1,0 +1,6 @@
+interface:
+  display_name: "Resume Builder"
+  short_description: "Repo-specific patterns and workflows for resume-builder"
+  default_prompt: "Use the resume-builder repo skill to follow existing architecture, testing, and workflow conventions."
+policy:
+  allow_implicit_invocation: true
